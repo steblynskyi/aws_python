@@ -138,12 +138,22 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             private_subgraph_name = f"cluster_{vpc_id}_private"
 
             with vpc_graph.subgraph(name=public_subgraph_name) as public_graph:
-                public_graph.attr(label="Public Subnets", color="darkseagreen", style="rounded")
-                public_graph.node_attr.update(style="filled", fillcolor="mintcream")
+                public_graph.attr(
+                    label="Public Subnets",
+                    color="darkseagreen",
+                    style="rounded",
+                    bgcolor="mintcream",
+                )
+                public_graph.node_attr.update(style="filled", fillcolor="honeydew")
 
             with vpc_graph.subgraph(name=private_subgraph_name) as private_graph:
-                private_graph.attr(label="Private Subnets", color="lightsteelblue", style="rounded")
-                private_graph.node_attr.update(style="filled", fillcolor="ghostwhite")
+                private_graph.attr(
+                    label="Private Subnets",
+                    color="lightsteelblue",
+                    style="rounded",
+                    bgcolor="ghostwhite",
+                )
+                private_graph.node_attr.update(style="filled", fillcolor="azure")
 
             route_tables_in_vpc = route_tables_by_vpc.get(vpc_id, [])
             for route_table in route_tables_in_vpc:
@@ -174,15 +184,18 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             for subnet in subnet_by_vpc.get(vpc_id, []):
                 subnet_id = subnet["SubnetId"]
                 cidr = subnet.get("CidrBlock", "")
-                subnet_label = f"{subnet_id}\n{cidr}"
-                target_graph = (
-                    public_graph if is_public_subnet(subnet) else private_graph
-                )
+                public = is_public_subnet(subnet)
+                visibility_label = "Public" if public else "Private"
+                subnet_label = f"{subnet_id}\n{cidr}\n({visibility_label})"
+                target_graph = public_graph if public else private_graph
+                node_color = "#b6f2b6" if public else "#d2dcff"
                 target_graph.node(
                     subnet_id,
                     subnet_label,
                     shape="box",
                     style="rounded,filled",
+                    fillcolor=node_color,
+                    color="darkseagreen" if public else "steelblue",
                 )
 
                 associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_by_vpc.get(
@@ -206,6 +219,31 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     for node_id, (_, attrs, _) in gateway_nodes.items():
         if node_id.startswith("igw-") or node_id.startswith("eigw-"):
             graph.edge("internet", node_id, style="dashed")
+
+    if subnet_by_vpc:
+        with graph.subgraph(name="cluster_legend") as legend:
+            legend.attr(label="Legend", color="gray", style="dashed")
+            legend.node(
+                "legend_public_subnet",
+                "Public Subnet",
+                shape="box",
+                style="rounded,filled",
+                fillcolor="#b6f2b6",
+                color="darkseagreen",
+            )
+            legend.node(
+                "legend_private_subnet",
+                "Private Subnet",
+                shape="box",
+                style="rounded,filled",
+                fillcolor="#d2dcff",
+                color="steelblue",
+            )
+            legend.edge(
+                "legend_public_subnet",
+                "legend_private_subnet",
+                style="invis",
+            )
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
