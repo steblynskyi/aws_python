@@ -59,10 +59,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     graph.node(
         "internet",
         "Internet",
-        shape="cloud",
+        shape="oval",
         color="lightblue",
         style="filled",
         fillcolor="aliceblue",
+        penwidth="2",
     )
 
     gateway_nodes: Dict[str, Tuple[str, Dict[str, str], str]] = {}
