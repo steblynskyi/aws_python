@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator, Sequence, TypeVar
 
 import boto3
+from botocore.exceptions import OperationNotPageableError
 
 T = TypeVar("T")
 
@@ -11,7 +12,14 @@ T = TypeVar("T")
 def safe_paginate(client: boto3.client, method_name: str, result_key: str, **kwargs) -> Iterator[dict]:
     """Iterate through paginated boto3 results while handling pagination gaps."""
 
-    paginator = client.get_paginator(method_name)
+    try:
+        paginator = client.get_paginator(method_name)
+    except OperationNotPageableError:
+        response = getattr(client, method_name)(**kwargs)
+        for item in response.get(result_key, []):
+            yield item
+        return
+
     for page in paginator.paginate(**kwargs):
         for item in page.get(result_key, []):
             yield item
