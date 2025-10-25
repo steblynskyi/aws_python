@@ -101,6 +101,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         return None
 
     ec2 = session.client("ec2")
+    rds = session.client("rds")
     graph = Digraph("aws_network", format="png")
     graph.attr(rankdir="TB", bgcolor="white", fontname="Helvetica")
     graph.node_attr.update(fontname="Helvetica", fontsize="11")
@@ -138,6 +139,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         )
     except (ClientError, EndpointConnectionError) as exc:
         raise RuntimeError(f"Unable to generate diagram: {exc}") from exc
+
+    try:
+        db_instances = list(safe_paginate(rds, "describe_db_instances", "DBInstances"))
+    except (ClientError, EndpointConnectionError):
+        db_instances = []
 
     subnet_by_vpc: Dict[str, List[dict]] = {}
     for subnet in subnets:
@@ -183,6 +189,14 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     for summaries in instances_by_subnet.values():
         summaries.sort(key=lambda inst: ((inst.name or inst.instance_id) or ""))
+
+    rds_instances_by_vpc: Dict[str, List[dict]] = {}
+    for db_instance in db_instances:
+        subnet_group = db_instance.get("DBSubnetGroup") or {}
+        vpc_id = subnet_group.get("VpcId")
+        if not vpc_id:
+            continue
+        rds_instances_by_vpc.setdefault(vpc_id, []).append(db_instance)
 
     def classify_subnet(subnet: dict, route_table: Optional[dict]) -> Tuple[str, bool]:
         """Determine subnet tier key and isolation."""
@@ -504,6 +518,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 group="internet",
             )
 
+            subnet_ids_in_vpc = {subnet["SubnetId"] for subnet in subnets_in_vpc}
+
             tier_nodes: Dict[str, Dict[str, List[str]]] = {
                 tier_key: {az: [] for az in azs} for tier_key, _ in TIER_ORDER
             }
@@ -748,6 +764,61 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                             style="dotted",
                         )
 
+            for db_instance in rds_instances_by_vpc.get(vpc_id, []):
+                identifier = db_instance.get("DBInstanceIdentifier", "")
+                engine = db_instance.get("Engine") or ""
+                status = db_instance.get("DBInstanceStatus") or ""
+                instance_class = db_instance.get("DBInstanceClass") or ""
+                label_lines = []
+                if identifier:
+                    label_lines.append(f"<B>{escape(identifier)}</B>")
+                if engine:
+                    label_lines.append(escape(engine))
+                if instance_class:
+                    label_lines.append(escape(instance_class))
+                if status:
+                    label_lines.append(f"Status: {escape(status)}")
+
+                label_html = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
+                label_html += "<TR><TD BGCOLOR='#fdebd0'><FONT COLOR='#7b341e'>"
+                label_html += "<BR/>".join(label_lines) if label_lines else "RDS Instance"
+                label_html += "</FONT></TD></TR></TABLE>>"
+
+                node_name = f"rds_{identifier or 'instance'}"
+                node_name = node_name.replace("-", "_")
+
+                subnet_group = db_instance.get("DBSubnetGroup") or {}
+                subnets_for_instance = subnet_group.get("Subnets", [])
+                az_from_subnet = next(
+                    (
+                        subnet.get("SubnetAvailabilityZone", {}).get("Name")
+                        for subnet in subnets_for_instance
+                        if subnet.get("SubnetAvailabilityZone", {}).get("Name")
+                    ),
+                    center_az,
+                )
+                az_key = az_from_subnet or center_az or ""
+                if az_key not in tier_nodes["private_data"]:
+                    tier_nodes["private_data"][az_key] = []
+
+                vpc_graph.node(
+                    node_name,
+                    label_html,
+                    shape="plaintext",
+                    group=az_key,
+                )
+                tier_nodes["private_data"].setdefault(az_key, []).append(node_name)
+
+                for subnet in subnets_for_instance:
+                    subnet_id = subnet.get("SubnetIdentifier")
+                    if subnet_id and subnet_id in subnet_ids_in_vpc:
+                        vpc_graph.edge(
+                            subnet_id,
+                            node_name,
+                            color="#d97706",
+                            style="dashed",
+                        )
+
             for tier_key, tier_label in TIER_ORDER:
                 with vpc_graph.subgraph(name=f"cluster_{vpc_id}_{tier_key}") as tier_graph:
                     tier_graph.attr(rank="same")
@@ -820,6 +891,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     shape="plaintext",
                 )
                 legend.node(
+                    f"legend_rds_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#fdebd0'>RDS Instance</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
                     f"legend_igw_{vpc_id}",
                     "<<B>Internet Gateway / Internet</B>>",
                     shape="plaintext",
@@ -829,7 +905,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 legend.edge(f"legend_isolated_{vpc_id}", f"legend_nat_{vpc_id}", style="invis")
                 legend.edge(f"legend_nat_{vpc_id}", f"legend_vpce_{vpc_id}", style="invis")
                 legend.edge(f"legend_vpce_{vpc_id}", f"legend_instances_{vpc_id}", style="invis")
-                legend.edge(f"legend_instances_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
+                legend.edge(f"legend_instances_{vpc_id}", f"legend_rds_{vpc_id}", style="invis")
+                legend.edge(f"legend_rds_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
