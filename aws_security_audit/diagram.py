@@ -18,12 +18,35 @@ from html import escape
 
 
 @dataclass
+class RouteDetail:
+    """Structured information about a single route table entry."""
+
+    destination: str
+    target: Optional[str]
+    target_type: Optional[str]
+    state: Optional[str] = None
+    description: Optional[str] = None
+
+    def display_text(self) -> str:
+        """Return a human readable representation of the route."""
+
+        target_text = self.description or self.target
+        if target_text:
+            base = f"{self.destination} → {target_text}"
+        else:
+            base = self.destination
+        if self.state and self.state.lower() != "active":
+            base += f" [{self.state}]"
+        return base
+
+
+@dataclass
 class RouteSummary:
     """Compact representation of a route table for display."""
 
     route_table_id: str
     name: Optional[str]
-    routes: List[str]
+    routes: List[RouteDetail]
 
 
 @dataclass
@@ -138,6 +161,65 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
         return "private_app", isolated
 
+    def identify_route_target(route: dict) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Return the target identifier, type and optional description."""
+
+        nat_gateway_id = route.get("NatGatewayId")
+        if nat_gateway_id:
+            return nat_gateway_id, "nat_gateway", None
+
+        transit_gateway_id = route.get("TransitGatewayId")
+        if transit_gateway_id:
+            return transit_gateway_id, "transit_gateway", None
+
+        vpc_peering_id = route.get("VpcPeeringConnectionId")
+        if vpc_peering_id:
+            return vpc_peering_id, "vpc_peering_connection", None
+
+        vpc_endpoint_id = route.get("VpcEndpointId")
+        if vpc_endpoint_id:
+            return vpc_endpoint_id, "vpc_endpoint", None
+
+        egress_only_id = route.get("EgressOnlyInternetGatewayId")
+        if egress_only_id:
+            return egress_only_id, "egress_only_internet_gateway", None
+
+        gateway_id = route.get("GatewayId")
+        if gateway_id:
+            if gateway_id.lower() == "local":
+                return None, None, None
+            if gateway_id.startswith("igw-"):
+                return gateway_id, "internet_gateway", None
+            if gateway_id.startswith("eigw-"):
+                return gateway_id, "egress_only_internet_gateway", None
+            if gateway_id.startswith("vgw-"):
+                return gateway_id, "virtual_private_gateway", None
+            if gateway_id.startswith("tgw-"):
+                return gateway_id, "transit_gateway", None
+            if gateway_id.startswith("pcx-"):
+                return gateway_id, "vpc_peering_connection", None
+            if gateway_id.startswith("vpce-"):
+                return gateway_id, "vpc_endpoint", None
+            return gateway_id, "gateway", None
+
+        instance_id = route.get("InstanceId")
+        if instance_id:
+            return instance_id, "instance", None
+
+        network_interface_id = route.get("NetworkInterfaceId")
+        if network_interface_id:
+            return network_interface_id, "network_interface", None
+
+        carrier_gateway_id = route.get("CarrierGatewayId")
+        if carrier_gateway_id:
+            return carrier_gateway_id, "carrier_gateway", None
+
+        local_gateway_id = route.get("LocalGatewayId")
+        if local_gateway_id:
+            return local_gateway_id, "local_gateway", None
+
+        return None, None, None
+
     def route_summaries(route_table: Optional[dict]) -> Optional[RouteSummary]:
         if not route_table:
             return None
@@ -151,38 +233,46 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             None,
         )
 
-        summaries: List[str] = []
+        summaries: List[RouteDetail] = []
         for route in route_table.get("Routes", []):
             destination = route.get("DestinationCidrBlock") or route.get(
                 "DestinationIpv6CidrBlock"
             )
             if not destination:
                 continue
-            if (route.get("GatewayId") or "").lower() == "local":
-                continue
-            if destination in {"0.0.0.0/0", "::/0"}:
-                target = (
-                    route.get("GatewayId")
-                    or route.get("NatGatewayId")
-                    or route.get("EgressOnlyInternetGatewayId")
-                    or route.get("TransitGatewayId")
-                    or route.get("VpcPeeringConnectionId")
-                    or route.get("InstanceId")
-                    or route.get("NetworkInterfaceId")
+            target, target_type, description = identify_route_target(route)
+            state = route.get("State")
+            if not target and not description:
+                if state and state.lower() != "active":
+                    description = state
+                else:
+                    continue
+
+            if description is None and target_type in {
+                "transit_gateway",
+                "vpc_peering_connection",
+                "virtual_private_gateway",
+                "carrier_gateway",
+                "local_gateway",
+            }:
+                pretty_name = {
+                    "transit_gateway": "Transit Gateway",
+                    "vpc_peering_connection": "VPC Peering",
+                    "virtual_private_gateway": "Virtual Private Gateway",
+                    "carrier_gateway": "Carrier Gateway",
+                    "local_gateway": "Local Gateway",
+                }[target_type]
+                description = f"{pretty_name} ({target})"
+
+            summaries.append(
+                RouteDetail(
+                    destination=destination,
+                    target=target,
+                    target_type=target_type,
+                    state=state,
+                    description=description,
                 )
-            else:
-                target = (
-                    route.get("GatewayId")
-                    or route.get("TransitGatewayId")
-                    or route.get("VpcPeeringConnectionId")
-                    or route.get("NatGatewayId")
-                    or route.get("VpcEndpointId")
-                    or route.get("InstanceId")
-                    or route.get("NetworkInterfaceId")
-                )
-            if not target:
-                continue
-            summaries.append(f"{destination} → {target}")
+            )
 
         return RouteSummary(route_table_id=route_table["RouteTableId"], name=name, routes=summaries)
 
@@ -247,7 +337,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             route_lines.append(escape(cell.route_summary.route_table_id))
             if cell.route_summary.routes:
                 for route in cell.route_summary.routes:
-                    route_lines.append(escape(route))
+                    route_lines.append(escape(route.display_text()))
             else:
                 route_lines.append("No non-local routes")
             route_html = "<BR ALIGN='LEFT'/>".join(route_lines)
@@ -345,7 +435,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         tier_nodes[tier][az] = []
                 cells[az].append(cell)
 
+            external_nodes: Dict[str, str] = {}
             nat_node_names: List[str] = []
+            nat_node_lookup: Dict[str, str] = {}
             for nat in nat_in_vpc:
                 nat_id = nat["NatGatewayId"]
                 subnet_id = nat.get("SubnetId", "")
@@ -388,9 +480,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 )
                 tier_nodes["ingress"].setdefault(az_key, []).append(node_name)
                 nat_node_names.append(node_name)
+                nat_node_lookup[nat_id] = node_name
+                external_nodes[nat_id] = node_name
 
             center_az = azs[len(azs) // 2] if azs else ""
             igw_node_names: List[str] = []
+            igw_node_lookup: Dict[str, str] = {}
             for igw_id in igw_in_vpc:
                 node_name = f"{igw_id}_node"
                 vpc_graph.node(
@@ -406,6 +501,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 vpc_graph.edge(f"{vpc_id}_internet", node_name, color="#4a5568", style="dashed")
                 tier_nodes["ingress"].setdefault(center_az, []).append(node_name)
                 igw_node_names.append(node_name)
+                igw_node_lookup[igw_id] = node_name
+                external_nodes[igw_id] = node_name
 
             for nat_node in nat_node_names:
                 for igw_node in igw_node_names:
@@ -424,31 +521,102 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     tier_nodes[cell.tier][az].append(node_name)
 
                     if cell.route_summary:
+                        def ensure_external_node(node_id: str, node_type: str) -> Optional[str]:
+                            if not node_id or node_id in external_nodes:
+                                return external_nodes.get(node_id)
+
+                            label_map = {
+                                "egress_only_internet_gateway": (
+                                    f"<<B>{escape(node_id)}</B><BR/>Egress-Only IGW>>",
+                                    "box",
+                                    "rounded,filled,dashed",
+                                    "#4a5568",
+                                    "white",
+                                ),
+                                "transit_gateway": (
+                                    f"<<B>{escape(node_id)}</B><BR/>Transit Gateway>>",
+                                    "box",
+                                    "rounded,filled,dashed",
+                                    "#2c5282",
+                                    "#ebf8ff",
+                                ),
+                                "vpc_peering_connection": (
+                                    f"<<B>{escape(node_id)}</B><BR/>VPC Peering>>",
+                                    "box",
+                                    "rounded,dashed",
+                                    "#2c5282",
+                                    "white",
+                                ),
+                                "virtual_private_gateway": (
+                                    f"<<B>{escape(node_id)}</B><BR/>Virtual Private Gateway>>",
+                                    "box",
+                                    "rounded,filled,dashed",
+                                    "#2c5282",
+                                    "#edf2f7",
+                                ),
+                                "carrier_gateway": (
+                                    f"<<B>{escape(node_id)}</B><BR/>Carrier Gateway>>",
+                                    "box",
+                                    "rounded,dashed",
+                                    "#2c5282",
+                                    "white",
+                                ),
+                                "local_gateway": (
+                                    f"<<B>{escape(node_id)}</B><BR/>Local Gateway>>",
+                                    "box",
+                                    "rounded,dashed",
+                                    "#2c5282",
+                                    "white",
+                                ),
+                            }
+
+                            if node_type not in label_map:
+                                return None
+
+                            label, shape, style, color, fillcolor = label_map[node_type]
+                            node_name = f"{node_id}_node"
+                            vpc_graph.node(
+                                node_name,
+                                label,
+                                shape=shape,
+                                style=style,
+                                color=color,
+                                fillcolor=fillcolor,
+                                fontsize="10",
+                            )
+                            external_nodes[node_id] = node_name
+                            return node_name
+
                         for route in cell.route_summary.routes:
-                            if "→ nat-" in route:
-                                nat_id = next(
-                                    (part.split("→")[-1].strip() for part in [route] if "nat-" in part),
-                                    None,
-                                )
-                                if nat_id:
-                                    vpc_graph.edge(
-                                        f"{node_name}:routes",
-                                        f"{nat_id}_node",
-                                        color="#b7791f",
-                                        arrowhead="normal",
-                                    )
-                            if "→ igw-" in route:
-                                igw_id = next(
-                                    (part.split("→")[-1].strip() for part in [route] if "igw-" in part),
-                                    None,
-                                )
-                                if igw_id:
-                                    vpc_graph.edge(
-                                        f"{node_name}:routes",
-                                        f"{igw_id}_node",
-                                        color="#2f855a",
-                                        arrowhead="normal",
-                                    )
+                            target_id = route.target
+                            target_type = route.target_type or ""
+                            if not target_id:
+                                continue
+
+                            if target_type == "nat_gateway":
+                                target_node = nat_node_lookup.get(target_id)
+                                edge_color = "#b7791f"
+                            elif target_type in {"internet_gateway", "egress_only_internet_gateway"}:
+                                target_node = igw_node_lookup.get(target_id)
+                                if not target_node:
+                                    target_node = ensure_external_node(target_id, target_type)
+                                edge_color = "#2f855a"
+                            elif target_type == "vpc_endpoint":
+                                target_node = external_nodes.get(target_id)
+                                edge_color = "#4c51bf"
+                            else:
+                                target_node = ensure_external_node(target_id, target_type)
+                                edge_color = "#2c5282"
+
+                            if not target_node:
+                                continue
+
+                            vpc_graph.edge(
+                                f"{node_name}:routes",
+                                target_node,
+                                color=edge_color,
+                                arrowhead="normal",
+                            )
 
             subnet_az_map = {
                 subnet["SubnetId"]: subnet.get("AvailabilityZone", "") for subnet in subnets_in_vpc
@@ -474,6 +642,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     fontsize="10",
                 )
                 tier_nodes["shared"].setdefault(endpoint_az, []).append(node_name)
+                external_nodes[endpoint_id] = node_name
 
                 for subnet_id in endpoint.get("SubnetIds", []):
                     if subnet_id in subnet_route_table:
