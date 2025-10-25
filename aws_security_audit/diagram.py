@@ -1,7 +1,8 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
@@ -12,6 +13,42 @@ try:  # Optional dependency used for diagram generation
     from graphviz import Digraph  # type: ignore
 except Exception:  # pragma: no cover - library is optional
     Digraph = None  # type: ignore
+
+from html import escape
+
+
+@dataclass
+class RouteSummary:
+    """Compact representation of a route table for display."""
+
+    route_table_id: str
+    name: Optional[str]
+    routes: List[str]
+
+
+@dataclass
+class SubnetCell:
+    """Information required to render a subnet + route table cell."""
+
+    subnet_id: str
+    name: Optional[str]
+    cidr: Optional[str]
+    az: Optional[str]
+    classification: str
+    tier: str
+    color: str
+    font_color: str
+    route_summary: Optional[RouteSummary]
+    is_isolated: bool
+
+
+TIER_ORDER = [
+    ("ingress", "Ingress (IGW / NAT)"),
+    ("public", "Public Subnets"),
+    ("private_app", "Private App Subnets"),
+    ("private_data", "Private Data Subnets"),
+    ("shared", "Shared / Directories"),
+]
 
 
 def generate_network_diagram(session: boto3.session.Session, output_path: str) -> Optional[str]:
@@ -29,8 +66,14 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     try:
         vpcs = list(safe_paginate(ec2, "describe_vpcs", "Vpcs"))
         subnets = list(safe_paginate(ec2, "describe_subnets", "Subnets"))
-        reservations = list(safe_paginate(ec2, "describe_instances", "Reservations"))
         route_tables = list(safe_paginate(ec2, "describe_route_tables", "RouteTables"))
+        nat_gateways = list(safe_paginate(ec2, "describe_nat_gateways", "NatGateways"))
+        internet_gateways = list(
+            safe_paginate(ec2, "describe_internet_gateways", "InternetGateways")
+        )
+        vpc_endpoints = list(
+            safe_paginate(ec2, "describe_vpc_endpoints", "VpcEndpoints")
+        )
     except (ClientError, EndpointConnectionError) as exc:
         raise RuntimeError(f"Unable to generate diagram: {exc}") from exc
 
@@ -51,124 +94,182 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             if subnet_id:
                 subnet_route_table[subnet_id] = route_table["RouteTableId"]
 
-    instances_by_subnet: Dict[str, List[dict]] = {}
-    for reservation in reservations:
-        for instance in reservation.get("Instances", []):
-            subnet_id = instance.get("SubnetId")
-            if subnet_id:
-                instances_by_subnet.setdefault(subnet_id, []).append(instance)
+    def classify_subnet(subnet: dict, route_table: Optional[dict]) -> Tuple[str, bool]:
+        """Determine subnet tier key and isolation."""
 
-    graph.node(
-        "internet",
-        "<<B>Internet</B>>",
-        shape="box",
-        style="rounded,filled",
-        color="#7f7f7f",
-        fillcolor="white",
-        penwidth="2",
-        fontsize="12",
-    )
+        public = False
+        isolated = True
+        routes = route_table.get("Routes", []) if route_table else []
 
-    gateway_nodes: Dict[str, Tuple[str, Dict[str, str], str]] = {}
+        for route in routes:
+            destination = route.get("DestinationCidrBlock") or route.get(
+                "DestinationIpv6CidrBlock"
+            )
+            if destination in {"0.0.0.0/0", "::/0"}:
+                isolated = False
+                if (route.get("GatewayId") or "").startswith("igw-"):
+                    public = True
+                if route.get("NatGatewayId"):
+                    public = False
+        if not routes:
+            isolated = True
 
-    def route_target(route: dict) -> Optional[Tuple[str, str, Dict[str, str]]]:
-        destination = route.get("DestinationCidrBlock") or route.get(
-            "DestinationIpv6CidrBlock"
-        )
-        if not destination:
+        if subnet.get("MapPublicIpOnLaunch"):
+            public = True
+            isolated = False
+
+        if public:
+            return "public", False
+
+        name = next(
+            (
+                tag["Value"]
+                for tag in subnet.get("Tags", [])
+                if tag.get("Key") == "Name" and tag.get("Value")
+            ),
+            "",
+        ).lower()
+
+        if any(keyword in name for keyword in {"data", "db", "database"}):
+            return "private_data", isolated
+
+        if any(keyword in name for keyword in {"directory", "shared", "ad", "ds"}):
+            return "shared", isolated
+
+        return "private_app", isolated
+
+    def route_summaries(route_table: Optional[dict]) -> Optional[RouteSummary]:
+        if not route_table:
             return None
 
-        if destination not in {"0.0.0.0/0", "::/0"} and not route.get("NatGatewayId"):
-            # Focus on default or NAT routes to keep the diagram readable.
-            return None
-
-        target_mappings: Iterable[Tuple[str, str, str, Dict[str, str]]] = (
+        name = next(
             (
-                "GatewayId",
-                "igw-",
-                "Internet Gateway",
-                {"shape": "box", "style": "rounded,filled", "color": "#7f7f7f", "fillcolor": "white", "fontsize": "11"},
+                tag["Value"]
+                for tag in route_table.get("Tags", [])
+                if tag.get("Key") == "Name" and tag.get("Value")
             ),
-            (
-                "EgressOnlyInternetGatewayId",
-                "eigw-",
-                "Egress-Only Internet Gateway",
-                {"shape": "box", "style": "rounded,filled", "color": "#7f7f7f", "fillcolor": "white", "fontsize": "11"},
-            ),
-            (
-                "NatGatewayId",
-                "nat-",
-                "NAT Gateway",
-                {"shape": "box", "style": "rounded,filled", "fillcolor": "#fff2cc", "color": "#b45f06", "fontsize": "11"},
-            ),
-            (
-                "TransitGatewayId",
-                "tgw-",
-                "Transit Gateway",
-                {"shape": "hexagon", "style": "filled", "fillcolor": "#f4cccc", "color": "#cc0000", "fontsize": "11"},
-            ),
-            (
-                "VpcPeeringConnectionId",
-                "pcx-",
-                "VPC Peering",
-                {"shape": "doublecircle", "style": "filled", "fillcolor": "#d9d2e9", "color": "#674ea7", "fontsize": "11"},
-            ),
+            None,
         )
 
-        for key, prefix, label, attrs in target_mappings:
-            value = route.get(key)
-            if value and value.startswith(prefix):
-                target_label = f"<<B>{value}</B><BR/>{label}>"
-                return value, target_label, attrs
-
-        instance_id = route.get("InstanceId")
-        if instance_id:
-            return (
-                instance_id,
-                f"<<B>{instance_id}</B><BR/>Instance>",
-                {"shape": "component", "style": "filled", "fillcolor": "white", "color": "#555555", "fontsize": "11"},
-            )
-
-        eni_id = route.get("NetworkInterfaceId")
-        if eni_id:
-            return (
-                eni_id,
-                f"<<B>{eni_id}</B><BR/>ENI>",
-                {"shape": "component", "style": "filled", "fillcolor": "white", "color": "#555555", "fontsize": "11"},
-            )
-
-        return None
-
-    def is_public_route_table(route_table: dict) -> bool:
+        summaries: List[str] = []
         for route in route_table.get("Routes", []):
             destination = route.get("DestinationCidrBlock") or route.get(
                 "DestinationIpv6CidrBlock"
             )
-            if destination not in {"0.0.0.0/0", "::/0"}:
+            if not destination:
                 continue
+            if (route.get("GatewayId") or "").lower() == "local":
+                continue
+            if destination in {"0.0.0.0/0", "::/0"}:
+                target = (
+                    route.get("GatewayId")
+                    or route.get("NatGatewayId")
+                    or route.get("EgressOnlyInternetGatewayId")
+                    or route.get("TransitGatewayId")
+                    or route.get("VpcPeeringConnectionId")
+                    or route.get("InstanceId")
+                    or route.get("NetworkInterfaceId")
+                )
+            else:
+                target = (
+                    route.get("GatewayId")
+                    or route.get("TransitGatewayId")
+                    or route.get("VpcPeeringConnectionId")
+                    or route.get("NatGatewayId")
+                    or route.get("VpcEndpointId")
+                    or route.get("InstanceId")
+                    or route.get("NetworkInterfaceId")
+                )
+            if not target:
+                continue
+            summaries.append(f"{destination} → {target}")
 
-            gateway_id = route.get("GatewayId") or ""
-            if gateway_id.startswith("igw-"):
-                return True
+        return RouteSummary(route_table_id=route_table["RouteTableId"], name=name, routes=summaries)
 
-            if route.get("EgressOnlyInternetGatewayId"):
-                return True
+    def subnet_cell(subnet: dict, tier: str, classification: str, isolated: bool, route_summary: Optional[RouteSummary]) -> SubnetCell:
+        color_map = {
+            "public": ("#ccebd4", "#1f3f2e"),
+            "private_app": ("#cfe3ff", "#1a365d"),
+            "private_data": ("#c0d7ff", "#102a56"),
+            "shared": ("#e2e2e2", "#2d3748"),
+        }
 
-        return False
+        fillcolor, fontcolor = color_map.get(classification, ("#cfe3ff", "#1a365d"))
+        if isolated:
+            fillcolor = "#e2e2e2"
+            fontcolor = "#2d3748"
 
-    def is_public_subnet(subnet: dict) -> bool:
-        route_table_id = subnet_route_table.get(subnet["SubnetId"]) or main_route_table_by_vpc.get(
-            subnet["VpcId"], ""
+        name = next(
+            (
+                tag["Value"]
+                for tag in subnet.get("Tags", [])
+                if tag.get("Key") == "Name" and tag.get("Value")
+            ),
+            None,
         )
-        if route_table_id:
-            route_table = next(
-                (rt for rt in route_tables_by_vpc.get(subnet["VpcId"], []) if rt["RouteTableId"] == route_table_id),
-                None,
-            )
-            if route_table and is_public_route_table(route_table):
-                return True
+        cidr = subnet.get("CidrBlock")
+        az = subnet.get("AvailabilityZone")
 
-        return bool(subnet.get("MapPublicIpOnLaunch"))
+        return SubnetCell(
+            subnet_id=subnet["SubnetId"],
+            name=name,
+            cidr=cidr,
+            az=az,
+            classification=classification,
+            tier=tier,
+            color=fillcolor,
+            font_color=fontcolor,
+            route_summary=route_summary,
+            is_isolated=isolated,
+        )
+
+    def format_cell_label(cell: SubnetCell) -> str:
+        subnet_lines = []
+        if cell.name:
+            subnet_lines.append(f"<B>{escape(cell.name)}</B>")
+        subnet_lines.append(f"<FONT POINT-SIZE='10'>{escape(cell.subnet_id)}</FONT>")
+        if cell.cidr:
+            subnet_lines.append(escape(cell.cidr))
+        if cell.az:
+            subnet_lines.append(escape(cell.az))
+        if cell.route_summary:
+            subnet_lines.append(
+                f"<FONT POINT-SIZE='9' COLOR='#2d3748'><B>rt:</B> {escape(cell.route_summary.route_table_id)}</FONT>"
+            )
+
+        subnet_html = "<BR/>".join(subnet_lines)
+
+        route_html = "<FONT POINT-SIZE='9' COLOR='#2d3748'><I>No non-local routes</I></FONT>"
+        if cell.route_summary:
+            route_lines = []
+            if cell.route_summary.name:
+                route_lines.append(f"<B>{escape(cell.route_summary.name)}</B>")
+            route_lines.append(escape(cell.route_summary.route_table_id))
+            if cell.route_summary.routes:
+                for route in cell.route_summary.routes:
+                    route_lines.append(escape(route))
+            else:
+                route_lines.append("No non-local routes")
+            route_html = "<BR ALIGN='LEFT'/>".join(route_lines)
+
+        return (
+            "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
+            f"<TR><TD BGCOLOR='{cell.color}' COLOR='{cell.font_color}'><FONT COLOR='{cell.font_color}'>{subnet_html}</FONT></TD></TR>"
+            f"<TR><TD PORT='routes' BGCOLOR='#fff6d1'><FONT COLOR='#5c3d0c'>{route_html}</FONT></TD></TR>"
+            "</TABLE>>"
+        )
+
+    def tier_placeholder(tier_key: str, az: str) -> str:
+        return f"placeholder_{tier_key}_{az}"
+
+    igw_nodes: Dict[str, dict] = {}
+    for igw in internet_gateways:
+        igw_id = igw["InternetGatewayId"]
+        igw_nodes[igw_id] = igw
+
+    endpoint_by_vpc: Dict[str, List[dict]] = {}
+    for endpoint in vpc_endpoints:
+        endpoint_by_vpc.setdefault(endpoint.get("VpcId", ""), []).append(endpoint)
 
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
@@ -177,286 +278,288 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         cidr_block = vpc.get("CidrBlock")
         if cidr_block:
             vpc_label_lines.append(cidr_block)
-        vpc_label = "<" + "<BR ALIGN=\"LEFT\"/>".join(vpc_label_lines) + ">"
+        dhcp_options_id = vpc.get("DhcpOptionsId")
+        if dhcp_options_id and dhcp_options_id != "default":
+            vpc_label_lines.append(f"DHCP Options: {dhcp_options_id}")
+        vpc_label = "<" + "<BR ALIGN='LEFT'/>".join(vpc_label_lines) + ">"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
             vpc_graph.attr(
                 label=vpc_label,
                 style="rounded",
-                color="gray",
+                color="#4a5568",
                 fontsize="13",
                 fontname="Helvetica",
             )
-            vpc_graph.node_attr.update(fontname="Helvetica")
-            vpc_graph.edge_attr.update(fontname="Helvetica")
 
-            public_subgraph_name = f"cluster_{vpc_id}_public"
-            private_subgraph_name = f"cluster_{vpc_id}_private"
-
-            with vpc_graph.subgraph(name=public_subgraph_name) as public_graph:
-                public_graph.attr(
-                    label="<<B>Public Subnets</B>>",
-                    color="#6aa84f",
-                    style="rounded",
-                    bgcolor="#ebf7ef",
-                    fontname="Helvetica",
-                )
-                public_graph.node_attr.update(
-                    style="rounded,filled",
-                    fillcolor="#B7E1CD",
-                    color="#6aa84f",
-                    shape="box",
-                )
-                public_graph.graph_attr.update(rank="same")
-
-            with vpc_graph.subgraph(name=private_subgraph_name) as private_graph:
-                private_graph.attr(
-                    label="<<B>Private Subnets</B>>",
-                    color="#3c78d8",
-                    style="rounded",
-                    bgcolor="#eef3fb",
-                    fontname="Helvetica",
-                )
-                private_graph.node_attr.update(
-                    style="rounded,filled",
-                    fillcolor="#C9DAF8",
-                    color="#3c78d8",
-                    shape="box",
-                )
-                private_graph.graph_attr.update(rank="same")
+            subnets_in_vpc = [subnet for subnet in subnets if subnet["VpcId"] == vpc_id]
+            azs = sorted({subnet.get("AvailabilityZone", "") for subnet in subnets_in_vpc if subnet.get("AvailabilityZone")})
+            if not azs:
+                azs = [""]
 
             route_tables_in_vpc = route_tables_by_vpc.get(vpc_id, [])
             main_route_table_id = main_route_table_by_vpc.get(vpc_id)
-            with vpc_graph.subgraph(name=f"cluster_{vpc_id}_route_tables") as route_table_graph:
-                route_table_graph.attr(
-                    label="<<B>Route Tables</B>>",
-                    color="gray",
-                    style="rounded",
-                    bgcolor="white",
-                    fontname="Helvetica",
+            route_table_by_id = {rt["RouteTableId"]: rt for rt in route_tables_in_vpc}
+
+            igw_in_vpc = [
+                igw_id
+                for igw_id, igw in igw_nodes.items()
+                if any(att.get("VpcId") == vpc_id for att in igw.get("Attachments", []))
+            ]
+
+            nat_in_vpc = [
+                nat
+                for nat in nat_gateways
+                if nat.get("VpcId") == vpc_id and nat.get("State") not in {"deleted", "failed"}
+            ]
+
+            endpoints_in_vpc = endpoint_by_vpc.get(vpc_id, [])
+
+            vpc_graph.node(
+                f"{vpc_id}_internet",
+                "<<B>Internet</B>>",
+                shape="box",
+                style="rounded,filled,dashed",
+                color="#4a5568",
+                fillcolor="white",
+                fontsize="12",
+                group="internet",
+            )
+
+            tier_nodes: Dict[str, Dict[str, List[str]]] = {
+                tier_key: {az: [] for az in azs} for tier_key, _ in TIER_ORDER
+            }
+
+            cells: Dict[str, List[SubnetCell]] = {az: [] for az in azs}
+            for subnet in sorted(subnets_in_vpc, key=lambda s: s.get("AvailabilityZone", "")):
+                subnet_id = subnet["SubnetId"]
+                associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_id
+                route_table = route_table_by_id.get(associated_route_table) if associated_route_table else None
+                tier_key, isolated = classify_subnet(subnet, route_table)
+                route_summary = route_summaries(route_table)
+                cell = subnet_cell(subnet, tier_key, tier_key if tier_key != "public" else "public", isolated, route_summary)
+                az = cell.az or ""
+                if az not in cells:
+                    cells[az] = []
+                    for tier, _ in TIER_ORDER:
+                        tier_nodes[tier][az] = []
+                cells[az].append(cell)
+
+            nat_node_names: List[str] = []
+            for nat in nat_in_vpc:
+                nat_id = nat["NatGatewayId"]
+                subnet_id = nat.get("SubnetId", "")
+                az = next(
+                    (
+                        subnet.get("AvailabilityZone")
+                        for subnet in subnets_in_vpc
+                        if subnet["SubnetId"] == subnet_id
+                    ),
+                    nat.get("AvailabilityZone", ""),
                 )
-                route_table_graph.node_attr.update(
+                eip = next(
+                    (
+                        addr.get("PublicIp")
+                        for addr in nat.get("NatGatewayAddresses", [])
+                        if addr.get("PublicIp")
+                    ),
+                    None,
+                )
+                nat_lines = [f"<B>{nat_id}</B>"]
+                if az:
+                    nat_lines.append(escape(az))
+                if eip:
+                    nat_lines.append(f"EIP: {escape(eip)}")
+                if subnet_id:
+                    nat_lines.append(f"Subnet: {escape(subnet_id)}")
+                nat_label = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>" "<TR><TD BGCOLOR='#fff2cc'><FONT COLOR='#8a6d3b'>"
+                nat_label += "<BR/>".join(nat_lines)
+                nat_label += "</FONT></TD></TR></TABLE>>"
+                node_name = f"{nat_id}_node"
+                az_key = az or (azs[len(azs) // 2] if azs else "")
+                if az_key not in tier_nodes["ingress"]:
+                    tier_nodes["ingress"][az_key] = []
+                vpc_graph.node(
+                    node_name,
+                    nat_label,
+                    shape="plaintext",
+                    style="dashed",
+                    group=az_key or nat_id,
+                )
+                tier_nodes["ingress"].setdefault(az_key, []).append(node_name)
+                nat_node_names.append(node_name)
+
+            center_az = azs[len(azs) // 2] if azs else ""
+            igw_node_names: List[str] = []
+            for igw_id in igw_in_vpc:
+                node_name = f"{igw_id}_node"
+                vpc_graph.node(
+                    node_name,
+                    f"<<B>{igw_id}</B><BR/>Internet Gateway>",
+                    shape="box",
+                    style="rounded,filled,dashed",
+                    color="#4a5568",
+                    fillcolor="white",
+                    fontsize="11",
+                    group=center_az or "internet",
+                )
+                vpc_graph.edge(f"{vpc_id}_internet", node_name, color="#4a5568", style="dashed")
+                tier_nodes["ingress"].setdefault(center_az, []).append(node_name)
+                igw_node_names.append(node_name)
+
+            for nat_node in nat_node_names:
+                for igw_node in igw_node_names:
+                    vpc_graph.edge(nat_node, igw_node, style="dashed", color="#b7791f")
+
+            for az, cell_list in cells.items():
+                for cell in cell_list:
+                    node_label = format_cell_label(cell)
+                    node_name = cell.subnet_id
+                    vpc_graph.node(
+                        node_name,
+                        node_label,
+                        shape="plaintext",
+                        group=az,
+                    )
+                    tier_nodes[cell.tier][az].append(node_name)
+
+                    if cell.route_summary:
+                        for route in cell.route_summary.routes:
+                            if "→ nat-" in route:
+                                nat_id = next(
+                                    (part.split("→")[-1].strip() for part in [route] if "nat-" in part),
+                                    None,
+                                )
+                                if nat_id:
+                                    vpc_graph.edge(
+                                        f"{node_name}:routes",
+                                        f"{nat_id}_node",
+                                        color="#b7791f",
+                                        arrowhead="normal",
+                                    )
+                            if "→ igw-" in route:
+                                igw_id = next(
+                                    (part.split("→")[-1].strip() for part in [route] if "igw-" in part),
+                                    None,
+                                )
+                                if igw_id:
+                                    vpc_graph.edge(
+                                        f"{node_name}:routes",
+                                        f"{igw_id}_node",
+                                        color="#2f855a",
+                                        arrowhead="normal",
+                                    )
+
+            subnet_az_map = {
+                subnet["SubnetId"]: subnet.get("AvailabilityZone", "") for subnet in subnets_in_vpc
+            }
+
+            for endpoint in endpoints_in_vpc:
+                endpoint_id = endpoint.get("VpcEndpointId", "")
+                endpoint_type = endpoint.get("VpcEndpointType", "")
+                services = ", ".join(endpoint.get("ServiceName", "").split(".")[-2:])
+                node_name = f"{endpoint_id}_node"
+                endpoint_az = center_az
+                if endpoint_type.lower() == "interface":
+                    subnet_ids = endpoint.get("SubnetIds", [])
+                    if subnet_ids:
+                        endpoint_az = subnet_az_map.get(subnet_ids[0], center_az)
+                vpc_graph.node(
+                    node_name,
+                    f"<<B>{endpoint_id}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>",
                     shape="box",
                     style="rounded,filled",
-                    fillcolor="white",
+                    fillcolor="#e8e8ff",
+                    color="#4c51bf",
                     fontsize="10",
                 )
+                tier_nodes["shared"].setdefault(endpoint_az, []).append(node_name)
 
-                private_route_tables: List[str] = []
-                public_route_tables: List[str] = []
-
-                def route_table_group(classification: str) -> str:
-                    return f"{vpc_id}_rt_{classification}_group"
-
-                for route_table in route_tables_in_vpc:
-                    route_table_id = route_table["RouteTableId"]
-                    name_tag = next(
-                        (
-                            tag["Value"]
-                            for tag in route_table.get("Tags", [])
-                            if tag.get("Key") == "Name" and tag.get("Value")
-                        ),
-                        None,
-                    )
-
-                    classification = "main"
-                    if route_table_id != main_route_table_id:
-                        classification = (
-                            "public" if is_public_route_table(route_table) else "private"
+                for subnet_id in endpoint.get("SubnetIds", []):
+                    if subnet_id in subnet_route_table:
+                        vpc_graph.edge(
+                            node_name,
+                            subnet_id,
+                            color="#4c51bf",
+                            style="dotted",
                         )
 
-                    if classification == "public":
-                        public_route_tables.append(route_table_id)
-                    elif classification == "private":
-                        private_route_tables.append(route_table_id)
+            for tier_key, tier_label in TIER_ORDER:
+                with vpc_graph.subgraph(name=f"cluster_{vpc_id}_{tier_key}") as tier_graph:
+                    tier_graph.attr(rank="same")
+                    tier_graph.attr(label=f"<<B>{escape(tier_label)}</B>>", color="gray", style="dashed")
+                    for az in azs:
+                        if not tier_nodes[tier_key].get(az):
+                            placeholder = tier_placeholder(tier_key, az)
+                            tier_graph.node(
+                                placeholder,
+                                "",
+                                shape="point",
+                                width="0.01",
+                                height="0.01",
+                                style="invis",
+                                group=az,
+                            )
+                            tier_nodes[tier_key][az] = [placeholder]
+                    for az in azs:
+                        for node in tier_nodes[tier_key][az]:
+                            tier_graph.node(node)
 
-                    label_lines: List[str] = []
-                    if name_tag:
-                        label_lines.append(name_tag)
-                    label_lines.append(route_table_id)
-                    if classification == "main":
-                        label_lines.append("(Main)")
-
-                    fillcolor = {
-                        "main": "#ffe599",
-                        "public": "#d9ead3",
-                        "private": "#d0e0f0",
-                    }[classification]
-
-                    peripheries = "2" if classification == "main" else "1"
-
-                    route_table_graph.node(
-                        route_table_id,
-                        "\n".join(label_lines),
-                        fillcolor=fillcolor,
-                        group=route_table_group(classification),
-                        peripheries=peripheries,
-                    )
-
-                    for route in route_table.get("Routes", []):
-                        target = route_target(route)
-                        if not target:
-                            continue
-                        target_id, target_label, attrs = target
-                        if target_id not in gateway_nodes:
-                            node_attrs = {
-                                "shape": "box",
-                                "style": "rounded,filled",
-                                "fillcolor": "white",
-                                "fontsize": "11",
-                            }
-                            node_attrs.update(attrs)
-                            vpc_graph.node(target_id, target_label, **node_attrs)
-                            gateway_nodes[target_id] = (target_label, node_attrs, vpc_id)
-                        graph.edge(
-                            route_table_id,
-                            target_id,
-                            label=route.get("DestinationCidrBlock")
-                            or route.get("DestinationIpv6CidrBlock", ""),
-                            color="#444444",
-                        )
-
-                private_anchor = None
-                public_anchor = None
-                if private_route_tables:
-                    private_anchor = f"{vpc_id}_rt_private_anchor"
-                    route_table_graph.node(
-                        private_anchor,
-                        "",
-                        shape="point",
-                        width="0",
-                        height="0",
+            for az in azs:
+                column_nodes = []
+                for tier_key, _ in TIER_ORDER:
+                    column_nodes.extend(tier_nodes[tier_key].get(az, []))
+                for idx in range(len(column_nodes) - 1):
+                    vpc_graph.edge(
+                        column_nodes[idx],
+                        column_nodes[idx + 1],
                         style="invis",
-                        group=route_table_group("private"),
-                    )
-                if public_route_tables:
-                    public_anchor = f"{vpc_id}_rt_public_anchor"
-                    route_table_graph.node(
-                        public_anchor,
-                        "",
-                        shape="point",
-                        width="0",
-                        height="0",
-                        style="invis",
-                        group=route_table_group("public"),
+                        weight="10",
                     )
 
-                if private_anchor and public_anchor:
-                    route_table_graph.edge(private_anchor, public_anchor, style="invis", weight="5")
-
-                if main_route_table_id:
-                    if private_anchor:
-                        route_table_graph.edge(
-                            main_route_table_id, private_anchor, style="invis", weight="5"
-                        )
-                    if public_anchor:
-                        route_table_graph.edge(
-                            main_route_table_id, public_anchor, style="invis", weight="5"
-                        )
-
-                for idx, route_table_id in enumerate(private_route_tables):
-                    predecessor = private_anchor if idx == 0 else private_route_tables[idx - 1]
-                    route_table_graph.edge(predecessor, route_table_id, style="invis", weight="2")
-
-                for idx, route_table_id in enumerate(public_route_tables):
-                    predecessor = public_anchor if idx == 0 else public_route_tables[idx - 1]
-                    route_table_graph.edge(predecessor, route_table_id, style="invis", weight="2")
-
-            for subnet in subnet_by_vpc.get(vpc_id, []):
-                subnet_id = subnet["SubnetId"]
-                cidr = subnet.get("CidrBlock", "")
-                public = is_public_subnet(subnet)
-                visibility_label = "Public" if public else "Private"
-                az = subnet.get("AvailabilityZone", "")
-                az_label = f"{az}" if az else ""
-                subnet_label_lines = [f"<B>{subnet_id}</B>"]
-                if az_label:
-                    subnet_label_lines.append(az_label)
-                if cidr:
-                    subnet_label_lines.append(cidr)
-                subnet_label_lines.append(f"({visibility_label})")
-                subnet_label = "<" + "<BR/>".join(subnet_label_lines) + ">"
-                target_graph = public_graph if public else private_graph
-                target_graph.node(subnet_id, subnet_label)
-
-                associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_by_vpc.get(
-                    vpc_id
+            with vpc_graph.subgraph(name=f"legend_{vpc_id}") as legend:
+                legend.attr(
+                    label="<<B>Legend</B>>",
+                    color="#b7b7b7",
+                    style="rounded",
+                    bgcolor="#f7f7f7",
+                    fontsize="11",
                 )
-                if associated_route_table:
-                    association_node = f"assoc_{associated_route_table}_{subnet_id}"
-                    association_label = f"{associated_route_table} → {subnet_id}"
-                    graph.node(
-                        association_node,
-                        association_label,
-                        shape="note",
-                        fontsize="10",
-                        color="#7f7f7f",
-                    )
-                    graph.edge(associated_route_table, association_node, color="#7f7f7f")
-                    graph.edge(association_node, subnet_id, color="#7f7f7f")
-
-                for instance in instances_by_subnet.get(subnet_id, []):
-                    name = next(
-                        (
-                            tag["Value"]
-                            for tag in instance.get("Tags", [])
-                            if tag.get("Key") == "Name"
-                        ),
-                        instance["InstanceId"],
-                    )
-                    graph.node(
-                        instance["InstanceId"],
-                        f"<<B>{name}</B>>",
-                        shape="component",
-                        style="filled",
-                        fillcolor="white",
-                        color="#555555",
-                        fontsize="11",
-                    )
-                    graph.edge(subnet_id, instance["InstanceId"], color="#4a86e8")
-
-    for node_id in gateway_nodes:
-        if node_id.startswith("igw-") or node_id.startswith("eigw-"):
-            graph.edge("internet", node_id, style="dashed", color="#7f7f7f")
-
-    if subnet_by_vpc:
-        with graph.subgraph(name="cluster_legend") as legend:
-            legend.attr(
-                label="<<B>Legend</B>>",
-                color="#b7b7b7",
-                style="rounded",
-                bgcolor="#f7f7f7",
-                fontsize="11",
-            )
-            legend.node(
-                "legend_public_subnet",
-                "<Public Subnet>",
-                shape="box",
-                style="rounded,filled",
-                fillcolor="#B7E1CD",
-                color="#6aa84f",
-                fontsize="10",
-            )
-            legend.node(
-                "legend_private_subnet",
-                "<Private Subnet>",
-                shape="box",
-                style="rounded,filled",
-                fillcolor="#C9DAF8",
-                color="#3c78d8",
-                fontsize="10",
-            )
-            legend.node(
-                "legend_igw",
-                "<<B>Internet Gateway</B>>",
-                shape="box",
-                style="rounded,filled",
-                fillcolor="white",
-                color="#7f7f7f",
-                fontsize="10",
-            )
-            legend.edge("legend_public_subnet", "legend_private_subnet", style="invis")
-            legend.edge("legend_private_subnet", "legend_igw", style="invis")
+                legend.node(
+                    f"legend_public_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#ccebd4'>Public subnet</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
+                    f"legend_private_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#cfe3ff'>Private subnet</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
+                    f"legend_isolated_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#e2e2e2'>Isolated subnet</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
+                    f"legend_nat_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#fff2cc'>NAT Gateway</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
+                    f"legend_vpce_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#e8e8ff'>VPC Endpoint</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
+                    f"legend_igw_{vpc_id}",
+                    "<<B>Internet Gateway / Internet</B>>",
+                    shape="plaintext",
+                )
+                legend.edge(f"legend_public_{vpc_id}", f"legend_private_{vpc_id}", style="invis")
+                legend.edge(f"legend_private_{vpc_id}", f"legend_isolated_{vpc_id}", style="invis")
+                legend.edge(f"legend_isolated_{vpc_id}", f"legend_nat_{vpc_id}", style="invis")
+                legend.edge(f"legend_nat_{vpc_id}", f"legend_vpce_{vpc_id}", style="invis")
+                legend.edge(f"legend_vpce_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
