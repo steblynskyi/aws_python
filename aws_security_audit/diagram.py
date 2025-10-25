@@ -22,7 +22,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     ec2 = session.client("ec2")
     graph = Digraph("aws_network", format="png")
-    graph.attr(rankdir="TB", bgcolor="white")
+    graph.attr(rankdir="TB", bgcolor="white", fontname="Helvetica")
+    graph.node_attr.update(fontname="Helvetica", fontsize="11")
+    graph.edge_attr.update(fontname="Helvetica", fontsize="10")
 
     try:
         vpcs = list(safe_paginate(ec2, "describe_vpcs", "Vpcs"))
@@ -58,12 +60,13 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     graph.node(
         "internet",
-        "Internet",
-        shape="oval",
-        color="lightblue",
-        style="filled",
-        fillcolor="aliceblue",
+        "<<B>Internet</B>>",
+        shape="box",
+        style="rounded,filled",
+        color="#7f7f7f",
+        fillcolor="white",
         penwidth="2",
+        fontsize="12",
     )
 
     gateway_nodes: Dict[str, Tuple[str, Dict[str, str], str]] = {}
@@ -80,30 +83,59 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             return None
 
         target_mappings: Iterable[Tuple[str, str, str, Dict[str, str]]] = (
-            ("GatewayId", "igw-", "Internet Gateway", {"shape": "Msquare"}),
+            (
+                "GatewayId",
+                "igw-",
+                "Internet Gateway",
+                {"shape": "box", "style": "rounded,filled", "color": "#7f7f7f", "fillcolor": "white", "fontsize": "11"},
+            ),
             (
                 "EgressOnlyInternetGatewayId",
                 "eigw-",
                 "Egress-Only Internet Gateway",
-                {"shape": "Msquare"},
+                {"shape": "box", "style": "rounded,filled", "color": "#7f7f7f", "fillcolor": "white", "fontsize": "11"},
             ),
-            ("NatGatewayId", "nat-", "NAT Gateway", {"shape": "box", "style": "rounded"}),
-            ("TransitGatewayId", "tgw-", "Transit Gateway", {"shape": "hexagon"}),
-            ("VpcPeeringConnectionId", "pcx-", "VPC Peering", {"shape": "doublecircle"}),
+            (
+                "NatGatewayId",
+                "nat-",
+                "NAT Gateway",
+                {"shape": "box", "style": "rounded,filled", "fillcolor": "#fff2cc", "color": "#b45f06", "fontsize": "11"},
+            ),
+            (
+                "TransitGatewayId",
+                "tgw-",
+                "Transit Gateway",
+                {"shape": "hexagon", "style": "filled", "fillcolor": "#f4cccc", "color": "#cc0000", "fontsize": "11"},
+            ),
+            (
+                "VpcPeeringConnectionId",
+                "pcx-",
+                "VPC Peering",
+                {"shape": "doublecircle", "style": "filled", "fillcolor": "#d9d2e9", "color": "#674ea7", "fontsize": "11"},
+            ),
         )
 
         for key, prefix, label, attrs in target_mappings:
             value = route.get(key)
             if value and value.startswith(prefix):
-                return value, f"{value}\n{label}", attrs
+                target_label = f"<<B>{value}</B><BR/>{label}>"
+                return value, target_label, attrs
 
         instance_id = route.get("InstanceId")
         if instance_id:
-            return instance_id, f"{instance_id}\nInstance", {"shape": "oval"}
+            return (
+                instance_id,
+                f"<<B>{instance_id}</B><BR/>Instance>",
+                {"shape": "component", "style": "filled", "fillcolor": "white", "color": "#555555", "fontsize": "11"},
+            )
 
         eni_id = route.get("NetworkInterfaceId")
         if eni_id:
-            return eni_id, f"{eni_id}\nENI", {"shape": "component"}
+            return (
+                eni_id,
+                f"<<B>{eni_id}</B><BR/>ENI>",
+                {"shape": "component", "style": "filled", "fillcolor": "white", "color": "#555555", "fontsize": "11"},
+            )
 
         return None
 
@@ -140,45 +172,74 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
-        vpc_label = f"VPC {vpc_id}"
-        if vpc.get("CidrBlock"):
-            vpc_label += f"\n{vpc['CidrBlock']}"
+        vpc_title = f"VPC {vpc_id}"
+        vpc_label_lines = [f"<B>{vpc_title}</B>"]
+        cidr_block = vpc.get("CidrBlock")
+        if cidr_block:
+            vpc_label_lines.append(cidr_block)
+        vpc_label = "<" + "<BR ALIGN=\"LEFT\"/>".join(vpc_label_lines) + ">"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
-            vpc_graph.attr(label=vpc_label, style="rounded", color="gray")
+            vpc_graph.attr(
+                label=vpc_label,
+                style="rounded",
+                color="gray",
+                fontsize="13",
+                fontname="Helvetica",
+            )
+            vpc_graph.node_attr.update(fontname="Helvetica")
+            vpc_graph.edge_attr.update(fontname="Helvetica")
 
             public_subgraph_name = f"cluster_{vpc_id}_public"
             private_subgraph_name = f"cluster_{vpc_id}_private"
 
             with vpc_graph.subgraph(name=public_subgraph_name) as public_graph:
                 public_graph.attr(
-                    label="Public Subnets",
-                    color="darkseagreen",
+                    label="<<B>Public Subnets</B>>",
+                    color="#6aa84f",
                     style="rounded",
-                    bgcolor="mintcream",
+                    bgcolor="#ebf7ef",
+                    fontname="Helvetica",
                 )
-                public_graph.node_attr.update(style="filled", fillcolor="honeydew")
+                public_graph.node_attr.update(
+                    style="rounded,filled",
+                    fillcolor="#B7E1CD",
+                    color="#6aa84f",
+                    shape="box",
+                )
+                public_graph.graph_attr.update(rank="same")
 
             with vpc_graph.subgraph(name=private_subgraph_name) as private_graph:
                 private_graph.attr(
-                    label="Private Subnets",
-                    color="lightsteelblue",
+                    label="<<B>Private Subnets</B>>",
+                    color="#3c78d8",
                     style="rounded",
-                    bgcolor="ghostwhite",
+                    bgcolor="#eef3fb",
+                    fontname="Helvetica",
                 )
-                private_graph.node_attr.update(style="filled", fillcolor="azure")
+                private_graph.node_attr.update(
+                    style="rounded,filled",
+                    fillcolor="#C9DAF8",
+                    color="#3c78d8",
+                    shape="box",
+                )
+                private_graph.graph_attr.update(rank="same")
 
             route_tables_in_vpc = route_tables_by_vpc.get(vpc_id, [])
             main_route_table_id = main_route_table_by_vpc.get(vpc_id)
             with vpc_graph.subgraph(name=f"cluster_{vpc_id}_route_tables") as route_table_graph:
                 route_table_graph.attr(
-                    label="Route Tables",
+                    label="<<B>Route Tables</B>>",
                     color="gray",
                     style="rounded",
                     bgcolor="white",
+                    fontname="Helvetica",
                 )
                 route_table_graph.node_attr.update(
-                    shape="folder", style="rounded,filled", fillcolor="white"
+                    shape="box",
+                    style="rounded,filled",
+                    fillcolor="white",
+                    fontsize="10",
                 )
 
                 private_route_tables: List[str] = []
@@ -217,16 +278,19 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         label_lines.append("(Main)")
 
                     fillcolor = {
-                        "main": "#fff1cc",
-                        "public": "#e6ffed",
-                        "private": "#e6f0ff",
+                        "main": "#ffe599",
+                        "public": "#d9ead3",
+                        "private": "#d0e0f0",
                     }[classification]
+
+                    peripheries = "2" if classification == "main" else "1"
 
                     route_table_graph.node(
                         route_table_id,
                         "\n".join(label_lines),
                         fillcolor=fillcolor,
                         group=route_table_group(classification),
+                        peripheries=peripheries,
                     )
 
                     for route in route_table.get("Routes", []):
@@ -237,8 +301,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         if target_id not in gateway_nodes:
                             node_attrs = {
                                 "shape": "box",
-                                "style": "filled",
+                                "style": "rounded,filled",
                                 "fillcolor": "white",
+                                "fontsize": "11",
                             }
                             node_attrs.update(attrs)
                             vpc_graph.node(target_id, target_label, **node_attrs)
@@ -248,6 +313,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                             target_id,
                             label=route.get("DestinationCidrBlock")
                             or route.get("DestinationIpv6CidrBlock", ""),
+                            color="#444444",
                         )
 
                 private_anchor = None
@@ -301,23 +367,33 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 cidr = subnet.get("CidrBlock", "")
                 public = is_public_subnet(subnet)
                 visibility_label = "Public" if public else "Private"
-                subnet_label = f"{subnet_id}\n{cidr}\n({visibility_label})"
+                az = subnet.get("AvailabilityZone", "")
+                az_label = f"{az}" if az else ""
+                subnet_label_lines = [f"<B>{subnet_id}</B>"]
+                if az_label:
+                    subnet_label_lines.append(az_label)
+                if cidr:
+                    subnet_label_lines.append(cidr)
+                subnet_label_lines.append(f"({visibility_label})")
+                subnet_label = "<" + "<BR/>".join(subnet_label_lines) + ">"
                 target_graph = public_graph if public else private_graph
-                node_color = "#b6f2b6" if public else "#d2dcff"
-                target_graph.node(
-                    subnet_id,
-                    subnet_label,
-                    shape="box",
-                    style="rounded,filled",
-                    fillcolor=node_color,
-                    color="darkseagreen" if public else "steelblue",
-                )
+                target_graph.node(subnet_id, subnet_label)
 
                 associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_by_vpc.get(
                     vpc_id
                 )
                 if associated_route_table:
-                    graph.edge(associated_route_table, subnet_id)
+                    association_node = f"assoc_{associated_route_table}_{subnet_id}"
+                    association_label = f"{associated_route_table} → {subnet_id}"
+                    graph.node(
+                        association_node,
+                        association_label,
+                        shape="note",
+                        fontsize="10",
+                        color="#7f7f7f",
+                    )
+                    graph.edge(associated_route_table, association_node, color="#7f7f7f")
+                    graph.edge(association_node, subnet_id, color="#7f7f7f")
 
                 for instance in instances_by_subnet.get(subnet_id, []):
                     name = next(
@@ -328,37 +404,59 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         ),
                         instance["InstanceId"],
                     )
-                    graph.node(instance["InstanceId"], name, shape="oval", style="filled", fillcolor="white")
-                    graph.edge(subnet_id, instance["InstanceId"])
+                    graph.node(
+                        instance["InstanceId"],
+                        f"<<B>{name}</B>>",
+                        shape="component",
+                        style="filled",
+                        fillcolor="white",
+                        color="#555555",
+                        fontsize="11",
+                    )
+                    graph.edge(subnet_id, instance["InstanceId"], color="#4a86e8")
 
-    for node_id, (_, attrs, _) in gateway_nodes.items():
+    for node_id in gateway_nodes:
         if node_id.startswith("igw-") or node_id.startswith("eigw-"):
-            graph.edge("internet", node_id, style="dashed")
+            graph.edge("internet", node_id, style="dashed", color="#7f7f7f")
 
     if subnet_by_vpc:
         with graph.subgraph(name="cluster_legend") as legend:
-            legend.attr(label="Legend", color="gray", style="dashed")
+            legend.attr(
+                label="<<B>Legend</B>>",
+                color="#b7b7b7",
+                style="rounded",
+                bgcolor="#f7f7f7",
+                fontsize="11",
+            )
             legend.node(
                 "legend_public_subnet",
-                "Public Subnet",
+                "<Public Subnet>",
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#b6f2b6",
-                color="darkseagreen",
+                fillcolor="#B7E1CD",
+                color="#6aa84f",
+                fontsize="10",
             )
             legend.node(
                 "legend_private_subnet",
-                "Private Subnet",
+                "<Private Subnet>",
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#d2dcff",
-                color="steelblue",
+                fillcolor="#C9DAF8",
+                color="#3c78d8",
+                fontsize="10",
             )
-            legend.edge(
-                "legend_public_subnet",
-                "legend_private_subnet",
-                style="invis",
+            legend.node(
+                "legend_igw",
+                "<<B>Internet Gateway</B>>",
+                shape="box",
+                style="rounded,filled",
+                fillcolor="white",
+                color="#7f7f7f",
+                fontsize="10",
             )
+            legend.edge("legend_public_subnet", "legend_private_subnet", style="invis")
+            legend.edge("legend_private_subnet", "legend_igw", style="invis")
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
