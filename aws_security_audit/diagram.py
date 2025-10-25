@@ -23,32 +23,38 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     ec2 = session.client("ec2")
     palette = {
-        "background": "#f8fafc",
-        "text": "#1f2933",
-        "muted_text": "#52606d",
-        "outline": "#cbd2d9",
-        "accent_public": "#0d9488",
-        "accent_private": "#1d4ed8",
-        "accent_main": "#b7791f",
-        "fill_public": "#e6fffa",
-        "fill_private": "#e0ecff",
-        "fill_main": "#fff4db",
-        "fill_vpc_public": "#f3fbfb",
-        "fill_vpc_private": "#f4f7ff",
-        "fill_edge": "#eef2ff",
+        "background": "#ffffff",
+        "text": "#1b1f23",
+        "muted_text": "#4b5563",
+        "outline": "#c7ccd1",
+        "accent_public": "#1b9e77",
+        "accent_private": "#386cb0",
+        "accent_main": "#fdae61",
+        "fill_public": "#fffde7",
+        "fill_private": "#f3e5f5",
+        "fill_main": "#ffe0b2",
+        "fill_vpc_public": "#f5faf5",
+        "fill_vpc_private": "#f5f6fc",
+        "fill_edge": "#f1f5f9",
+        "fill_gateway_public": "#ffebee",
+        "fill_gateway_nat": "#ffe0b2",
     }
 
     graph = Digraph("aws_network", format="png")
+    label = "AWS VPC Architecture"
+    if session.region_name:
+        label = f"AWS VPC Architecture — {session.region_name}"
     graph.attr(
-        rankdir="TB",
+        rankdir="LR",
         bgcolor=palette["background"],
         fontname="Helvetica",
         fontsize="12",
         fontcolor=palette["text"],
+        label=label,
         labelloc="t",
-        pad="0.4",
+        pad="0.5",
         nodesep="0.5",
-        ranksep="1.0 equally",
+        ranksep="0.9",
         splines="ortho",
     )
     graph.node_attr.update(
@@ -192,6 +198,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         bgcolor=palette["fill_edge"],
         fontname="Helvetica",
         fontcolor=palette["text"],
+        rankdir="LR",
+        nodesep="0.4",
+        ranksep="0.6",
     )
     edge_graph.node_attr.update(
         fontname="Helvetica",
@@ -235,21 +244,33 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 "GatewayId",
                 "igw-",
                 "Internet Gateway",
-                {"shape": "Msquare"},
+                {
+                    "shape": "Msquare",
+                    "style": "filled",
+                    "fillcolor": palette["fill_gateway_public"],
+                },
                 palette["accent_public"],
             ),
             (
                 "EgressOnlyInternetGatewayId",
                 "eigw-",
                 "Egress-Only Internet Gateway",
-                {"shape": "Msquare"},
+                {
+                    "shape": "Msquare",
+                    "style": "filled",
+                    "fillcolor": palette["fill_gateway_public"],
+                },
                 palette["accent_public"],
             ),
             (
                 "NatGatewayId",
                 "nat-",
                 "NAT Gateway",
-                {"shape": "box", "style": "rounded"},
+                {
+                    "shape": "box",
+                    "style": "rounded,filled",
+                    "fillcolor": palette["fill_gateway_nat"],
+                },
                 palette["accent_main"],
             ),
             (
@@ -411,6 +432,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             main_route_table_id = main_route_table_by_vpc.get(vpc_id)
             private_column_nodes: List[str] = []
             public_column_nodes: List[str] = []
+            route_table_rank_nodes: List[str] = []
 
             def append_column_node(column_nodes: List[str], node_id: str) -> None:
                 if node_id not in column_nodes:
@@ -472,6 +494,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         public_column_nodes if is_public_main else private_column_nodes,
                         route_table_id,
                     )
+                    route_table_rank_nodes.append(route_table_id)
                 else:
                     is_public = classification == "public"
                     target_graph = public_graph if is_public else private_graph
@@ -508,6 +531,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         public_column_nodes if is_public else private_column_nodes,
                         route_table_id,
                     )
+                    route_table_rank_nodes.append(route_table_id)
 
                 for route, target in display_routes:
                     target_id, target_label, attrs = target
@@ -609,6 +633,10 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             if public_column_nodes:
                 connect_column(public_anchor, public_column_nodes)
 
+            if len(route_table_rank_nodes) > 1:
+                joined_nodes = "; ".join(route_table_rank_nodes)
+                graph.body.append(f"{{ rank=same; {joined_nodes}; }}")
+
     graph.subgraph(edge_graph)
 
     for node_id, (_, attrs, _) in gateway_nodes.items():
@@ -696,14 +724,16 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 html_panel_label("NAT Gateway", metadata=["Shared connectivity"]),
                 shape="box",
                 style="rounded,filled",
-                fillcolor="white",
+                fillcolor=palette["fill_gateway_nat"],
+                color=palette["accent_main"],
             )
             legend.node(
                 "legend_igw",
                 html_panel_label("Internet Gateway", metadata=["Public egress"]),
                 shape="Msquare",
                 style="filled",
-                fillcolor="white",
+                fillcolor=palette["fill_gateway_public"],
+                color=palette["accent_public"],
             )
             legend.node(
                 "legend_instance",
