@@ -1,88 +1,31 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from html import escape
+from typing import Dict, List, Optional
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from .utils import safe_paginate
+from ..utils import safe_paginate
 
 try:  # Optional dependency used for diagram generation
     from graphviz import Digraph  # type: ignore
 except Exception:  # pragma: no cover - library is optional
     Digraph = None  # type: ignore
 
-from html import escape
-
-
-@dataclass
-class RouteDetail:
-    """Structured information about a single route table entry."""
-
-    destination: str
-    target: Optional[str]
-    target_type: Optional[str]
-    state: Optional[str] = None
-    description: Optional[str] = None
-
-    def display_text(self) -> str:
-        """Return a human readable representation of the route."""
-
-        target_text = self.description or self.target
-        if target_text:
-            base = f"{self.destination} → {target_text}"
-        else:
-            base = self.destination
-        if self.state and self.state.lower() != "active":
-            base += f" [{self.state}]"
-        return base
-
-
-@dataclass
-class RouteSummary:
-    """Compact representation of a route table for display."""
-
-    route_table_id: str
-    name: Optional[str]
-    routes: List[RouteDetail]
-
-
-@dataclass
-class SubnetCell:
-    """Information required to render a subnet + route table cell."""
-
-    subnet_id: str
-    name: Optional[str]
-    cidr: Optional[str]
-    az: Optional[str]
-    classification: str
-    tier: str
-    color: str
-    font_color: str
-    route_summary: Optional[RouteSummary]
-    is_isolated: bool
-    instances: List["InstanceSummary"]
-
-
-@dataclass
-class InstanceSummary:
-    """Compact details about an EC2 instance for display within a subnet."""
-
-    instance_id: str
-    name: Optional[str]
-    state: Optional[str]
-    private_ip: Optional[str]
-
-    def display_text(self) -> str:
-        """Return a formatted label for the instance."""
-
-        name_part = f"{self.name} ({self.instance_id})" if self.name else self.instance_id
-        state_part = f"[{self.state}]" if self.state else ""
-        ip_part = self.private_ip or ""
-        parts = [segment for segment in [name_part, state_part, ip_part] if segment]
-        return " ".join(parts)
+from .ec2 import group_instances_by_subnet
+from .models import InstanceSummary, RouteSummary, SubnetCell
+from .rds import group_rds_instances_by_vpc
+from .vpc import (
+    build_route_table_indexes,
+    build_subnet_cell,
+    classify_subnet,
+    format_subnet_cell_label,
+    group_subnets_by_vpc,
+    identify_route_target,
+    summarize_route_table,
+)
 
 
 TIER_ORDER = [
@@ -145,311 +88,15 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     except (ClientError, EndpointConnectionError):
         db_instances = []
 
-    subnet_by_vpc: Dict[str, List[dict]] = {}
-    for subnet in subnets:
-        subnet_by_vpc.setdefault(subnet["VpcId"], []).append(subnet)
+    subnet_by_vpc = group_subnets_by_vpc(subnets)
+    (
+        route_tables_by_vpc,
+        subnet_route_table,
+        main_route_table_by_vpc,
+    ) = build_route_table_indexes(route_tables)
 
-    route_tables_by_vpc: Dict[str, List[dict]] = {}
-    subnet_route_table: Dict[str, str] = {}
-    main_route_table_by_vpc: Dict[str, str] = {}
-    for route_table in route_tables:
-        vpc_id = route_table["VpcId"]
-        route_tables_by_vpc.setdefault(vpc_id, []).append(route_table)
-        for association in route_table.get("Associations", []):
-            if association.get("Main"):
-                main_route_table_by_vpc[vpc_id] = route_table["RouteTableId"]
-            subnet_id = association.get("SubnetId")
-            if subnet_id:
-                subnet_route_table[subnet_id] = route_table["RouteTableId"]
-
-    instances_by_subnet: Dict[str, List[InstanceSummary]] = {}
-    for reservation in reservations:
-        for instance in reservation.get("Instances", []):
-            state = (instance.get("State") or {}).get("Name")
-            if state == "terminated":
-                continue
-            subnet_id = instance.get("SubnetId")
-            if not subnet_id:
-                continue
-            name = next(
-                (
-                    tag.get("Value")
-                    for tag in instance.get("Tags", [])
-                    if tag.get("Key") == "Name" and tag.get("Value")
-                ),
-                None,
-            )
-            summary = InstanceSummary(
-                instance_id=instance.get("InstanceId", ""),
-                name=name,
-                state=state,
-                private_ip=instance.get("PrivateIpAddress"),
-            )
-            instances_by_subnet.setdefault(subnet_id, []).append(summary)
-
-    for summaries in instances_by_subnet.values():
-        summaries.sort(key=lambda inst: ((inst.name or inst.instance_id) or ""))
-
-    rds_instances_by_vpc: Dict[str, List[dict]] = {}
-    for db_instance in db_instances:
-        subnet_group = db_instance.get("DBSubnetGroup") or {}
-        vpc_id = subnet_group.get("VpcId")
-        if not vpc_id:
-            continue
-        rds_instances_by_vpc.setdefault(vpc_id, []).append(db_instance)
-
-    def classify_subnet(subnet: dict, route_table: Optional[dict]) -> Tuple[str, bool]:
-        """Determine subnet tier key and isolation."""
-
-        public = False
-        isolated = True
-        routes = route_table.get("Routes", []) if route_table else []
-
-        for route in routes:
-            destination = route.get("DestinationCidrBlock") or route.get(
-                "DestinationIpv6CidrBlock"
-            )
-            if destination in {"0.0.0.0/0", "::/0"}:
-                isolated = False
-                if (route.get("GatewayId") or "").startswith("igw-"):
-                    public = True
-                if route.get("NatGatewayId"):
-                    public = False
-        if not routes:
-            isolated = True
-
-        if subnet.get("MapPublicIpOnLaunch"):
-            public = True
-            isolated = False
-
-        if public:
-            return "public", False
-
-        name = next(
-            (
-                tag["Value"]
-                for tag in subnet.get("Tags", [])
-                if tag.get("Key") == "Name" and tag.get("Value")
-            ),
-            "",
-        ).lower()
-
-        if any(keyword in name for keyword in {"data", "db", "database"}):
-            return "private_data", isolated
-
-        if any(keyword in name for keyword in {"directory", "shared", "ad", "ds"}):
-            return "shared", isolated
-
-        return "private_app", isolated
-
-    def identify_route_target(route: dict) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-        """Return the target identifier, type and optional description."""
-
-        nat_gateway_id = route.get("NatGatewayId")
-        if nat_gateway_id:
-            return nat_gateway_id, "nat_gateway", None
-
-        transit_gateway_id = route.get("TransitGatewayId")
-        if transit_gateway_id:
-            return transit_gateway_id, "transit_gateway", None
-
-        vpc_peering_id = route.get("VpcPeeringConnectionId")
-        if vpc_peering_id:
-            return vpc_peering_id, "vpc_peering_connection", None
-
-        vpc_endpoint_id = route.get("VpcEndpointId")
-        if vpc_endpoint_id:
-            return vpc_endpoint_id, "vpc_endpoint", None
-
-        egress_only_id = route.get("EgressOnlyInternetGatewayId")
-        if egress_only_id:
-            return egress_only_id, "egress_only_internet_gateway", None
-
-        gateway_id = route.get("GatewayId")
-        if gateway_id:
-            if gateway_id.lower() == "local":
-                return None, None, None
-            if gateway_id.startswith("igw-"):
-                return gateway_id, "internet_gateway", None
-            if gateway_id.startswith("eigw-"):
-                return gateway_id, "egress_only_internet_gateway", None
-            if gateway_id.startswith("vgw-"):
-                return gateway_id, "virtual_private_gateway", None
-            if gateway_id.startswith("tgw-"):
-                return gateway_id, "transit_gateway", None
-            if gateway_id.startswith("pcx-"):
-                return gateway_id, "vpc_peering_connection", None
-            if gateway_id.startswith("vpce-"):
-                return gateway_id, "vpc_endpoint", None
-            return gateway_id, "gateway", None
-
-        instance_id = route.get("InstanceId")
-        if instance_id:
-            return instance_id, "instance", None
-
-        network_interface_id = route.get("NetworkInterfaceId")
-        if network_interface_id:
-            return network_interface_id, "network_interface", None
-
-        carrier_gateway_id = route.get("CarrierGatewayId")
-        if carrier_gateway_id:
-            return carrier_gateway_id, "carrier_gateway", None
-
-        local_gateway_id = route.get("LocalGatewayId")
-        if local_gateway_id:
-            return local_gateway_id, "local_gateway", None
-
-        return None, None, None
-
-    def route_summaries(route_table: Optional[dict]) -> Optional[RouteSummary]:
-        if not route_table:
-            return None
-
-        name = next(
-            (
-                tag["Value"]
-                for tag in route_table.get("Tags", [])
-                if tag.get("Key") == "Name" and tag.get("Value")
-            ),
-            None,
-        )
-
-        summaries: List[RouteDetail] = []
-        for route in route_table.get("Routes", []):
-            destination = route.get("DestinationCidrBlock") or route.get(
-                "DestinationIpv6CidrBlock"
-            )
-            if not destination:
-                continue
-            target, target_type, description = identify_route_target(route)
-            state = route.get("State")
-            if not target and not description:
-                if state and state.lower() != "active":
-                    description = state
-                else:
-                    continue
-
-            if description is None and target_type in {
-                "transit_gateway",
-                "vpc_peering_connection",
-                "virtual_private_gateway",
-                "carrier_gateway",
-                "local_gateway",
-            }:
-                pretty_name = {
-                    "transit_gateway": "Transit Gateway",
-                    "vpc_peering_connection": "VPC Peering",
-                    "virtual_private_gateway": "Virtual Private Gateway",
-                    "carrier_gateway": "Carrier Gateway",
-                    "local_gateway": "Local Gateway",
-                }[target_type]
-                description = f"{pretty_name} ({target})"
-
-            summaries.append(
-                RouteDetail(
-                    destination=destination,
-                    target=target,
-                    target_type=target_type,
-                    state=state,
-                    description=description,
-                )
-            )
-
-        return RouteSummary(route_table_id=route_table["RouteTableId"], name=name, routes=summaries)
-
-    def subnet_cell(
-        subnet: dict,
-        tier: str,
-        classification: str,
-        isolated: bool,
-        route_summary: Optional[RouteSummary],
-        instances: List[InstanceSummary],
-    ) -> SubnetCell:
-        color_map = {
-            "public": ("#ccebd4", "#1f3f2e"),
-            "private_app": ("#cfe3ff", "#1a365d"),
-            "private_data": ("#c0d7ff", "#102a56"),
-            "shared": ("#e2e2e2", "#2d3748"),
-        }
-
-        fillcolor, fontcolor = color_map.get(classification, ("#cfe3ff", "#1a365d"))
-        if isolated:
-            fillcolor = "#e2e2e2"
-            fontcolor = "#2d3748"
-
-        name = next(
-            (
-                tag["Value"]
-                for tag in subnet.get("Tags", [])
-                if tag.get("Key") == "Name" and tag.get("Value")
-            ),
-            None,
-        )
-        cidr = subnet.get("CidrBlock")
-        az = subnet.get("AvailabilityZone")
-
-        return SubnetCell(
-            subnet_id=subnet["SubnetId"],
-            name=name,
-            cidr=cidr,
-            az=az,
-            classification=classification,
-            tier=tier,
-            color=fillcolor,
-            font_color=fontcolor,
-            route_summary=route_summary,
-            is_isolated=isolated,
-            instances=instances,
-        )
-
-    def format_cell_label(cell: SubnetCell) -> str:
-        subnet_lines = []
-        if cell.name:
-            subnet_lines.append(f"<B>{escape(cell.name)}</B>")
-        subnet_lines.append(f"<FONT POINT-SIZE='10'>{escape(cell.subnet_id)}</FONT>")
-        if cell.cidr:
-            subnet_lines.append(escape(cell.cidr))
-        if cell.az:
-            subnet_lines.append(escape(cell.az))
-        if cell.route_summary:
-            subnet_lines.append(
-                f"<FONT POINT-SIZE='9' COLOR='#2d3748'><B>rt:</B> {escape(cell.route_summary.route_table_id)}</FONT>"
-            )
-
-        subnet_html = "<BR/>".join(subnet_lines)
-
-        route_html = "<FONT POINT-SIZE='9' COLOR='#2d3748'><I>No non-local routes</I></FONT>"
-        if cell.route_summary:
-            route_lines = []
-            if cell.route_summary.name:
-                route_lines.append(f"<B>{escape(cell.route_summary.name)}</B>")
-            route_lines.append(escape(cell.route_summary.route_table_id))
-            if cell.route_summary.routes:
-                for route in cell.route_summary.routes:
-                    route_lines.append(escape(route.display_text()))
-            else:
-                route_lines.append("No non-local routes")
-            route_html = "<BR ALIGN='LEFT'/>".join(route_lines)
-
-        instance_row = ""
-        if cell.instances:
-            instance_lines = ["<B>Instances</B>"]
-            for instance in cell.instances:
-                instance_lines.append(escape(instance.display_text()))
-            instance_html = "<BR ALIGN='LEFT'/>".join(instance_lines)
-            instance_row = (
-                "<TR><TD BGCOLOR='#eef2ff'><FONT COLOR='#1a365d'>"
-                f"{instance_html}"
-                "</FONT></TD></TR>"
-            )
-
-        return (
-            "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
-            f"<TR><TD BGCOLOR='{cell.color}' COLOR='{cell.font_color}'><FONT COLOR='{cell.font_color}'>{subnet_html}</FONT></TD></TR>"
-            f"<TR><TD PORT='routes' BGCOLOR='#fff6d1'><FONT COLOR='#5c3d0c'>{route_html}</FONT></TD></TR>"
-            f"{instance_row}"
-            "</TABLE>>"
-        )
+    instances_by_subnet = group_instances_by_subnet(reservations)
+    rds_instances_by_vpc = group_rds_instances_by_vpc(db_instances)
 
     def tier_placeholder(tier_key: str, az: str) -> str:
         return f"placeholder_{tier_key}_{az}"
@@ -530,8 +177,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_id
                 route_table = route_table_by_id.get(associated_route_table) if associated_route_table else None
                 tier_key, isolated = classify_subnet(subnet, route_table)
-                route_summary = route_summaries(route_table)
-                cell = subnet_cell(
+                route_summary = summarize_route_table(route_table)
+                cell = build_subnet_cell(
                     subnet,
                     tier_key,
                     tier_key if tier_key != "public" else "public",
@@ -621,7 +268,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
             for az, cell_list in cells.items():
                 for cell in cell_list:
-                    node_label = format_cell_label(cell)
+                    node_label = format_subnet_cell_label(cell)
                     node_name = cell.subnet_id
                     vpc_graph.node(
                         node_name,
