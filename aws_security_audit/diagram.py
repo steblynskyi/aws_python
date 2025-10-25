@@ -427,13 +427,33 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     )
 
                 metadata: List[str] = [f"ID: {route_table_id}"]
+                display_routes: List[Tuple[dict, Tuple[str, str, Dict[str, str]]]] = []
+                for route in route_table.get("Routes", []):
+                    target = route_target(route)
+                    if not target:
+                        continue
+                    display_routes.append((route, target))
+
+                for route, target in display_routes:
+                    destination = route.get("DestinationCidrBlock") or route.get(
+                        "DestinationIpv6CidrBlock"
+                    )
+                    if destination:
+                        metadata.append(f"Route: {destination} → {target[0]}")
                 subtitle_text: Optional[str] = None
 
                 if classification == "main":
                     if name_tag:
                         subtitle_text = "Main Route Table"
+                    is_public_main = is_public_route_table(route_table)
                     metadata.append("Role: Main")
-                    vpc_graph.node(
+                    metadata.append(
+                        "Visibility: Public" if is_public_main else "Visibility: Private"
+                    )
+                    target_graph = public_graph if is_public_main else private_graph
+                    anchor = public_anchor if is_public_main else private_anchor
+                    group = public_group if is_public_main else private_group
+                    target_graph.node(
                         route_table_id,
                         html_panel_label(
                             name_tag or "Main Route Table",
@@ -445,19 +465,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         style="rounded,filled",
                         fillcolor=palette["fill_main"],
                         color=palette["accent_main"],
-                        group=f"{vpc_id}_main",
+                        group=group,
                     )
-                    graph.edge(
+                    graph.edge(anchor, route_table_id, style="invis", weight="6")
+                    append_column_node(
+                        public_column_nodes if is_public_main else private_column_nodes,
                         route_table_id,
-                        private_anchor,
-                        style="invis",
-                        weight="8",
-                    )
-                    graph.edge(
-                        route_table_id,
-                        public_anchor,
-                        style="invis",
-                        weight="8",
                     )
                 else:
                     is_public = classification == "public"
@@ -496,10 +509,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         route_table_id,
                     )
 
-                for route in route_table.get("Routes", []):
-                    target = route_target(route)
-                    if not target:
-                        continue
+                for route, target in display_routes:
                     target_id, target_label, attrs = target
                     ensure_gateway_node(target_id, target_label, attrs, vpc_id)
                     graph.edge(
