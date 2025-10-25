@@ -9,7 +9,7 @@ from typing import List, Optional
 
 import boto3
 
-from .core import collect_findings, print_findings
+from .core import collect_findings, export_findings_to_excel, print_findings
 from .diagram import generate_network_diagram
 from .services import SERVICE_CHECKS
 
@@ -27,6 +27,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Subset of services to audit (default: all)",
     )
     parser.add_argument("--json", dest="json_path", help="Optional path to export findings as JSON")
+    parser.add_argument(
+        "--excel",
+        dest="excel_path",
+        help="Optional path to export findings as an Excel workbook (.xlsx)",
+    )
     parser.add_argument(
         "--diagram",
         dest="diagram_path",
@@ -55,6 +60,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         with open(args.json_path, "w", encoding="utf-8") as fh:
             json.dump([asdict(f) for f in findings], fh, indent=2, default=str)
         print(f"Findings exported to {args.json_path}")
+
+    if args.excel_path:
+        try:
+            path = export_findings_to_excel(findings, args.excel_path)
+        except RuntimeError as exc:
+            print(f"Failed to export Excel report: {exc}", file=sys.stderr)
+        else:
+            print(f"Excel report written to {path}")
 
     if args.diagram_path:
         try:

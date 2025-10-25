@@ -63,4 +63,42 @@ def print_findings(findings: Iterable[Finding]) -> None:
         print(f"{finding.service:<10} {finding.severity:<8} {resource:<40} {finding.message}")
 
 
-__all__ = ["collect_findings", "print_findings"]
+def export_findings_to_excel(findings: Iterable[Finding], path: str) -> str:
+    """Write *findings* to an Excel workbook located at *path*.
+
+    The function requires the optional :mod:`openpyxl` dependency. It returns the
+    path that was written so callers can surface it to users.
+    """
+
+    try:
+        from openpyxl import Workbook
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:  # pragma: no cover - dependency missing during tests
+        raise RuntimeError(
+            "The 'openpyxl' package is required to export findings to Excel. "
+            "Install it with 'pip install openpyxl'."
+        ) from exc
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Findings"
+
+    headers = ["Service", "Resource ID", "Severity", "Message"]
+    sheet.append(headers)
+    column_widths = [len(header) for header in headers]
+
+    for finding in findings:
+        row = [finding.service, finding.resource_id, finding.severity, finding.message]
+        sheet.append(row)
+        for idx, value in enumerate(row):
+            column_widths[idx] = max(column_widths[idx], len(str(value)))
+
+    for idx, width in enumerate(column_widths, start=1):
+        column_letter = get_column_letter(idx)
+        sheet.column_dimensions[column_letter].width = min(width + 2, 60)
+
+    workbook.save(path)
+    return path
+
+
+__all__ = ["collect_findings", "print_findings", "export_findings_to_excel"]
