@@ -512,12 +512,16 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 for route, target in display_routes:
                     target_id, target_label, attrs = target
                     ensure_gateway_node(target_id, target_label, attrs, vpc_id)
-                    graph.edge(
-                        route_table_id,
-                        target_id,
-                        label=route.get("DestinationCidrBlock")
-                        or route.get("DestinationIpv6CidrBlock", ""),
+                    route_label = route.get("DestinationCidrBlock") or route.get(
+                        "DestinationIpv6CidrBlock", ""
                     )
+                    edge_kwargs = {}
+                    if route_label:
+                        # Orthogonal edges do not support ``label`` attributes; using
+                        # ``xlabel`` keeps the annotation visible without triggering
+                        # Graphviz warnings.
+                        edge_kwargs["xlabel"] = route_label
+                    graph.edge(route_table_id, target_id, **edge_kwargs)
 
             graph.edge(private_anchor, public_anchor, style="invis", weight="4")
 
