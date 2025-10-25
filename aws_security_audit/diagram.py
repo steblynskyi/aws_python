@@ -22,7 +22,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     ec2 = session.client("ec2")
     graph = Digraph("aws_network", format="png")
-    graph.attr(rankdir="LR", bgcolor="white")
+    graph.attr(rankdir="TB", bgcolor="white")
 
     try:
         vpcs = list(safe_paginate(ec2, "describe_vpcs", "Vpcs"))
@@ -107,6 +107,23 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
         return None
 
+    def is_public_route_table(route_table: dict) -> bool:
+        for route in route_table.get("Routes", []):
+            destination = route.get("DestinationCidrBlock") or route.get(
+                "DestinationIpv6CidrBlock"
+            )
+            if destination not in {"0.0.0.0/0", "::/0"}:
+                continue
+
+            gateway_id = route.get("GatewayId") or ""
+            if gateway_id.startswith("igw-"):
+                return True
+
+            if route.get("EgressOnlyInternetGatewayId"):
+                return True
+
+        return False
+
     def is_public_subnet(subnet: dict) -> bool:
         route_table_id = subnet_route_table.get(subnet["SubnetId"]) or main_route_table_by_vpc.get(
             subnet["VpcId"], ""
@@ -116,12 +133,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 (rt for rt in route_tables_by_vpc.get(subnet["VpcId"], []) if rt["RouteTableId"] == route_table_id),
                 None,
             )
-            if route_table and any(
-                (route.get("GatewayId") or "").startswith("igw-")
-                and (route.get("DestinationCidrBlock") == "0.0.0.0/0"
-                or route.get("DestinationIpv6CidrBlock") == "::/0")
-                for route in route_table.get("Routes", [])
-            ):
+            if route_table and is_public_route_table(route_table):
                 return True
 
         return bool(subnet.get("MapPublicIpOnLaunch"))
@@ -157,30 +169,132 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 private_graph.node_attr.update(style="filled", fillcolor="azure")
 
             route_tables_in_vpc = route_tables_by_vpc.get(vpc_id, [])
-            for route_table in route_tables_in_vpc:
-                route_table_id = route_table["RouteTableId"]
-                label_lines = [route_table_id]
-                if route_table_id == main_route_table_by_vpc.get(vpc_id):
-                    label_lines.append("(Main)")
-                vpc_graph.node(
-                    route_table_id,
-                    "\n".join(label_lines),
-                    shape="folder",
-                    style="rounded,filled",
-                    fillcolor="white",
+            main_route_table_id = main_route_table_by_vpc.get(vpc_id)
+            with vpc_graph.subgraph(name=f"cluster_{vpc_id}_route_tables") as route_table_graph:
+                route_table_graph.attr(
+                    label="Route Tables",
+                    color="gray",
+                    style="rounded",
+                    bgcolor="white",
+                )
+                route_table_graph.node_attr.update(
+                    shape="folder", style="rounded,filled", fillcolor="white"
                 )
 
-                for route in route_table.get("Routes", []):
-                    target = route_target(route)
-                    if not target:
-                        continue
-                    target_id, target_label, attrs = target
-                    if target_id not in gateway_nodes:
-                        node_attrs = {"shape": "box", "style": "filled", "fillcolor": "white"}
-                        node_attrs.update(attrs)
-                        vpc_graph.node(target_id, target_label, **node_attrs)
-                        gateway_nodes[target_id] = (target_label, node_attrs, vpc_id)
-                    graph.edge(route_table_id, target_id, label=route.get("DestinationCidrBlock") or route.get("DestinationIpv6CidrBlock", ""))
+                private_route_tables: List[str] = []
+                public_route_tables: List[str] = []
+
+                def route_table_group(classification: str) -> str:
+                    return f"{vpc_id}_rt_{classification}_group"
+
+                for route_table in route_tables_in_vpc:
+                    route_table_id = route_table["RouteTableId"]
+                    name_tag = next(
+                        (
+                            tag["Value"]
+                            for tag in route_table.get("Tags", [])
+                            if tag.get("Key") == "Name" and tag.get("Value")
+                        ),
+                        None,
+                    )
+
+                    classification = "main"
+                    if route_table_id != main_route_table_id:
+                        classification = (
+                            "public" if is_public_route_table(route_table) else "private"
+                        )
+
+                    if classification == "public":
+                        public_route_tables.append(route_table_id)
+                    elif classification == "private":
+                        private_route_tables.append(route_table_id)
+
+                    label_lines: List[str] = []
+                    if name_tag:
+                        label_lines.append(name_tag)
+                    label_lines.append(route_table_id)
+                    if classification == "main":
+                        label_lines.append("(Main)")
+
+                    fillcolor = {
+                        "main": "#fff1cc",
+                        "public": "#e6ffed",
+                        "private": "#e6f0ff",
+                    }[classification]
+
+                    route_table_graph.node(
+                        route_table_id,
+                        "\n".join(label_lines),
+                        fillcolor=fillcolor,
+                        group=route_table_group(classification),
+                    )
+
+                    for route in route_table.get("Routes", []):
+                        target = route_target(route)
+                        if not target:
+                            continue
+                        target_id, target_label, attrs = target
+                        if target_id not in gateway_nodes:
+                            node_attrs = {
+                                "shape": "box",
+                                "style": "filled",
+                                "fillcolor": "white",
+                            }
+                            node_attrs.update(attrs)
+                            vpc_graph.node(target_id, target_label, **node_attrs)
+                            gateway_nodes[target_id] = (target_label, node_attrs, vpc_id)
+                        graph.edge(
+                            route_table_id,
+                            target_id,
+                            label=route.get("DestinationCidrBlock")
+                            or route.get("DestinationIpv6CidrBlock", ""),
+                        )
+
+                private_anchor = None
+                public_anchor = None
+                if private_route_tables:
+                    private_anchor = f"{vpc_id}_rt_private_anchor"
+                    route_table_graph.node(
+                        private_anchor,
+                        "",
+                        shape="point",
+                        width="0",
+                        height="0",
+                        style="invis",
+                        group=route_table_group("private"),
+                    )
+                if public_route_tables:
+                    public_anchor = f"{vpc_id}_rt_public_anchor"
+                    route_table_graph.node(
+                        public_anchor,
+                        "",
+                        shape="point",
+                        width="0",
+                        height="0",
+                        style="invis",
+                        group=route_table_group("public"),
+                    )
+
+                if private_anchor and public_anchor:
+                    route_table_graph.edge(private_anchor, public_anchor, style="invis", weight="5")
+
+                if main_route_table_id:
+                    if private_anchor:
+                        route_table_graph.edge(
+                            main_route_table_id, private_anchor, style="invis", weight="5"
+                        )
+                    if public_anchor:
+                        route_table_graph.edge(
+                            main_route_table_id, public_anchor, style="invis", weight="5"
+                        )
+
+                for idx, route_table_id in enumerate(private_route_tables):
+                    predecessor = private_anchor if idx == 0 else private_route_tables[idx - 1]
+                    route_table_graph.edge(predecessor, route_table_id, style="invis", weight="2")
+
+                for idx, route_table_id in enumerate(public_route_tables):
+                    predecessor = public_anchor if idx == 0 else public_route_tables[idx - 1]
+                    route_table_graph.edge(predecessor, route_table_id, style="invis", weight="2")
 
             for subnet in subnet_by_vpc.get(vpc_id, []):
                 subnet_id = subnet["SubnetId"]
