@@ -22,7 +22,17 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     ec2 = session.client("ec2")
     graph = Digraph("aws_network", format="png")
-    graph.attr(rankdir="TB", bgcolor="white")
+    graph.attr(
+        rankdir="TB",
+        bgcolor="white",
+        fontname="Helvetica",
+        fontsize="12",
+        labelloc="t",
+        nodesep="0.6",
+        ranksep="1.0",
+    )
+    graph.node_attr.update(fontname="Helvetica", fontsize="11")
+    graph.edge_attr.update(fontname="Helvetica", fontsize="10")
 
     try:
         vpcs = list(safe_paginate(ec2, "describe_vpcs", "Vpcs"))
@@ -58,15 +68,21 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     graph.node(
         "internet",
-        "Internet",
+        label="<<B>Internet</B>>",
         shape="oval",
-        color="lightblue",
-        style="filled",
-        fillcolor="aliceblue",
+        color="#9faab5",
+        style="dashed",
+        fillcolor="white",
         penwidth="2",
     )
+    with graph.subgraph() as internet_rank:
+        internet_rank.attr(rank="source")
+        internet_rank.node("internet")
 
     gateway_nodes: Dict[str, Tuple[str, Dict[str, str], str]] = {}
+
+    def formatted_label(title: str, identifier: str) -> str:
+        return f"<<B>{title}</B><BR/>{identifier}>>"
 
     def route_target(route: dict) -> Optional[Tuple[str, str, Dict[str, str]]]:
         destination = route.get("DestinationCidrBlock") or route.get(
@@ -95,15 +111,15 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         for key, prefix, label, attrs in target_mappings:
             value = route.get(key)
             if value and value.startswith(prefix):
-                return value, f"{value}\n{label}", attrs
+                return value, formatted_label(label, value), attrs
 
         instance_id = route.get("InstanceId")
         if instance_id:
-            return instance_id, f"{instance_id}\nInstance", {"shape": "oval"}
+            return instance_id, formatted_label("Instance", instance_id), {"shape": "component"}
 
         eni_id = route.get("NetworkInterfaceId")
         if eni_id:
-            return eni_id, f"{eni_id}\nENI", {"shape": "component"}
+            return eni_id, formatted_label("ENI", eni_id), {"shape": "component"}
 
         return None
 
@@ -140,42 +156,52 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
-        vpc_label = f"VPC {vpc_id}"
+        vpc_label_lines = [f"<B>VPC {vpc_id}</B>"]
         if vpc.get("CidrBlock"):
-            vpc_label += f"\n{vpc['CidrBlock']}"
+            vpc_label_lines.append(vpc["CidrBlock"])
+        vpc_label = f"<<{'<BR/>'.join(vpc_label_lines)}>>"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
-            vpc_graph.attr(label=vpc_label, style="rounded", color="gray")
+            vpc_graph.attr(
+                label=vpc_label,
+                style="rounded",
+                color="#7d8996",
+                fontname="Helvetica",
+                fontsize="12",
+            )
 
             public_subgraph_name = f"cluster_{vpc_id}_public"
             private_subgraph_name = f"cluster_{vpc_id}_private"
 
             with vpc_graph.subgraph(name=public_subgraph_name) as public_graph:
                 public_graph.attr(
-                    label="Public Subnets",
-                    color="darkseagreen",
+                    label="<<B>Public Subnets</B>>",
+                    color="#4b8b3b",
                     style="rounded",
-                    bgcolor="mintcream",
+                    bgcolor="#e8f5ed",
+                    rank="same",
                 )
-                public_graph.node_attr.update(style="filled", fillcolor="honeydew")
+                public_graph.node_attr.update(style="filled", fillcolor="#B7E1CD")
 
             with vpc_graph.subgraph(name=private_subgraph_name) as private_graph:
                 private_graph.attr(
-                    label="Private Subnets",
-                    color="lightsteelblue",
+                    label="<<B>Private Subnets</B>>",
+                    color="#4461a7",
                     style="rounded",
-                    bgcolor="ghostwhite",
+                    bgcolor="#eef3fc",
+                    rank="same",
                 )
-                private_graph.node_attr.update(style="filled", fillcolor="azure")
+                private_graph.node_attr.update(style="filled", fillcolor="#C9DAF8")
 
             route_tables_in_vpc = route_tables_by_vpc.get(vpc_id, [])
             main_route_table_id = main_route_table_by_vpc.get(vpc_id)
             with vpc_graph.subgraph(name=f"cluster_{vpc_id}_route_tables") as route_table_graph:
                 route_table_graph.attr(
-                    label="Route Tables",
-                    color="gray",
+                    label="<<B>Route Tables</B>>",
+                    color="#7d8996",
                     style="rounded",
-                    bgcolor="white",
+                    bgcolor="#fdfdfd",
+                    rank="same",
                 )
                 route_table_graph.node_attr.update(
                     shape="folder", style="rounded,filled", fillcolor="white"
@@ -217,15 +243,18 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         label_lines.append("(Main)")
 
                     fillcolor = {
-                        "main": "#fff1cc",
-                        "public": "#e6ffed",
-                        "private": "#e6f0ff",
+                        "main": "#ffe8bf",
+                        "public": "#dbf2e3",
+                        "private": "#dde7fb",
                     }[classification]
+                    penwidth = "2" if classification == "main" else "1"
 
                     route_table_graph.node(
                         route_table_id,
                         "\n".join(label_lines),
                         fillcolor=fillcolor,
+                        color="#7d8996",
+                        penwidth=penwidth,
                         group=route_table_group(classification),
                     )
 
@@ -248,6 +277,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                             target_id,
                             label=route.get("DestinationCidrBlock")
                             or route.get("DestinationIpv6CidrBlock", ""),
+                            color="#7d8996",
                         )
 
                 private_anchor = None
@@ -301,23 +331,33 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 cidr = subnet.get("CidrBlock", "")
                 public = is_public_subnet(subnet)
                 visibility_label = "Public" if public else "Private"
-                subnet_label = f"{subnet_id}\n{cidr}\n({visibility_label})"
+                az = subnet.get("AvailabilityZone", "")
+                subnet_label = f"{subnet_id}\n{cidr}\n{visibility_label}\n{az}"
                 target_graph = public_graph if public else private_graph
-                node_color = "#b6f2b6" if public else "#d2dcff"
+                node_color = "#B7E1CD" if public else "#C9DAF8"
                 target_graph.node(
                     subnet_id,
                     subnet_label,
                     shape="box",
                     style="rounded,filled",
                     fillcolor=node_color,
-                    color="darkseagreen" if public else "steelblue",
+                    color="#4b8b3b" if public else "#4461a7",
                 )
 
                 associated_route_table = subnet_route_table.get(subnet_id) or main_route_table_by_vpc.get(
                     vpc_id
                 )
                 if associated_route_table:
-                    graph.edge(associated_route_table, subnet_id)
+                    association_label = visibility_label
+                    if az:
+                        association_label = f"{visibility_label} ({az})"
+                    graph.edge(
+                        associated_route_table,
+                        subnet_id,
+                        label=association_label,
+                        color="#7d8996",
+                        arrowsize="0.7",
+                    )
 
                 for instance in instances_by_subnet.get(subnet_id, []):
                     name = next(
@@ -328,31 +368,58 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         ),
                         instance["InstanceId"],
                     )
-                    graph.node(instance["InstanceId"], name, shape="oval", style="filled", fillcolor="white")
-                    graph.edge(subnet_id, instance["InstanceId"])
+                    graph.node(
+                        instance["InstanceId"],
+                        name,
+                        shape="component",
+                        style="filled",
+                        fillcolor="white",
+                        color="#7d8996",
+                    )
+                    graph.edge(subnet_id, instance["InstanceId"], color="#7d8996")
 
+    gateway_rank_nodes: List[str] = []
     for node_id, (_, attrs, _) in gateway_nodes.items():
         if node_id.startswith("igw-") or node_id.startswith("eigw-"):
-            graph.edge("internet", node_id, style="dashed")
+            graph.edge("internet", node_id, style="dashed", color="#7d8996")
+        if attrs.get("shape") in {"Msquare", "box"}:
+            gateway_rank_nodes.append(node_id)
+
+    if gateway_rank_nodes:
+        sink_anchor = "gateway_rank_anchor"
+        graph.node(sink_anchor, "", shape="point", width="0", height="0", style="invis")
+        with graph.subgraph() as gateway_rank:
+            gateway_rank.attr(rank="sink")
+            gateway_rank.node(sink_anchor)
+            for gateway_node in gateway_rank_nodes:
+                gateway_rank.edge(gateway_node, sink_anchor, style="invis")
 
     if subnet_by_vpc:
         with graph.subgraph(name="cluster_legend") as legend:
-            legend.attr(label="Legend", color="gray", style="dashed")
+            legend.attr(
+                label="<<B>Legend</B>>",
+                color="#9faab5",
+                style="rounded",
+                bgcolor="#f7f9fb",
+                fontsize="10",
+            )
             legend.node(
                 "legend_public_subnet",
                 "Public Subnet",
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#b6f2b6",
-                color="darkseagreen",
+                fillcolor="#B7E1CD",
+                color="#4b8b3b",
+                fontsize="9",
             )
             legend.node(
                 "legend_private_subnet",
                 "Private Subnet",
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#d2dcff",
-                color="steelblue",
+                fillcolor="#C9DAF8",
+                color="#4461a7",
+                fontsize="9",
             )
             legend.edge(
                 "legend_public_subnet",
