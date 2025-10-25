@@ -50,17 +50,21 @@ aws_security_audit/
 ### Prerequisites
 
 - Python 3.9+
-- `boto3`
 - AWS credentials with read access to the audited services
-- Optional: `graphviz` (Python package and system binaries) to create
-  topology diagrams
-- Optional: `openpyxl` to export findings to Excel workbooks
 
-Install dependencies with:
+### Installation
+
+Install the Python dependencies listed in `requirements.txt` to enable the
+core auditing features as well as optional Excel export and diagram
+generation helpers:
 
 ```bash
-pip install boto3 graphviz
+pip install -r requirements.txt
 ```
+
+> **Note:** The `graphviz` package in `requirements.txt` installs the Python
+> bindings. Rendering diagrams also requires the Graphviz system binaries to
+> be available on your PATH.
 
 ### Usage
 
