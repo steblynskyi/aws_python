@@ -63,6 +63,26 @@ class SubnetCell:
     font_color: str
     route_summary: Optional[RouteSummary]
     is_isolated: bool
+    instances: List["InstanceSummary"]
+
+
+@dataclass
+class InstanceSummary:
+    """Compact details about an EC2 instance for display within a subnet."""
+
+    instance_id: str
+    name: Optional[str]
+    state: Optional[str]
+    private_ip: Optional[str]
+
+    def display_text(self) -> str:
+        """Return a formatted label for the instance."""
+
+        name_part = f"{self.name} ({self.instance_id})" if self.name else self.instance_id
+        state_part = f"[{self.state}]" if self.state else ""
+        ip_part = self.private_ip or ""
+        parts = [segment for segment in [name_part, state_part, ip_part] if segment]
+        return " ".join(parts)
 
 
 TIER_ORDER = [
@@ -97,6 +117,25 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         vpc_endpoints = list(
             safe_paginate(ec2, "describe_vpc_endpoints", "VpcEndpoints")
         )
+        reservations = list(
+            safe_paginate(
+                ec2,
+                "describe_instances",
+                "Reservations",
+                Filters=[
+                    {
+                        "Name": "instance-state-name",
+                        "Values": [
+                            "pending",
+                            "running",
+                            "stopping",
+                            "stopped",
+                            "shutting-down",
+                        ],
+                    }
+                ],
+            )
+        )
     except (ClientError, EndpointConnectionError) as exc:
         raise RuntimeError(f"Unable to generate diagram: {exc}") from exc
 
@@ -116,6 +155,34 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             subnet_id = association.get("SubnetId")
             if subnet_id:
                 subnet_route_table[subnet_id] = route_table["RouteTableId"]
+
+    instances_by_subnet: Dict[str, List[InstanceSummary]] = {}
+    for reservation in reservations:
+        for instance in reservation.get("Instances", []):
+            state = (instance.get("State") or {}).get("Name")
+            if state == "terminated":
+                continue
+            subnet_id = instance.get("SubnetId")
+            if not subnet_id:
+                continue
+            name = next(
+                (
+                    tag.get("Value")
+                    for tag in instance.get("Tags", [])
+                    if tag.get("Key") == "Name" and tag.get("Value")
+                ),
+                None,
+            )
+            summary = InstanceSummary(
+                instance_id=instance.get("InstanceId", ""),
+                name=name,
+                state=state,
+                private_ip=instance.get("PrivateIpAddress"),
+            )
+            instances_by_subnet.setdefault(subnet_id, []).append(summary)
+
+    for summaries in instances_by_subnet.values():
+        summaries.sort(key=lambda inst: ((inst.name or inst.instance_id) or ""))
 
     def classify_subnet(subnet: dict, route_table: Optional[dict]) -> Tuple[str, bool]:
         """Determine subnet tier key and isolation."""
@@ -276,7 +343,14 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
         return RouteSummary(route_table_id=route_table["RouteTableId"], name=name, routes=summaries)
 
-    def subnet_cell(subnet: dict, tier: str, classification: str, isolated: bool, route_summary: Optional[RouteSummary]) -> SubnetCell:
+    def subnet_cell(
+        subnet: dict,
+        tier: str,
+        classification: str,
+        isolated: bool,
+        route_summary: Optional[RouteSummary],
+        instances: List[InstanceSummary],
+    ) -> SubnetCell:
         color_map = {
             "public": ("#ccebd4", "#1f3f2e"),
             "private_app": ("#cfe3ff", "#1a365d"),
@@ -311,6 +385,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             font_color=fontcolor,
             route_summary=route_summary,
             is_isolated=isolated,
+            instances=instances,
         )
 
     def format_cell_label(cell: SubnetCell) -> str:
@@ -342,10 +417,23 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 route_lines.append("No non-local routes")
             route_html = "<BR ALIGN='LEFT'/>".join(route_lines)
 
+        instance_row = ""
+        if cell.instances:
+            instance_lines = ["<B>Instances</B>"]
+            for instance in cell.instances:
+                instance_lines.append(escape(instance.display_text()))
+            instance_html = "<BR ALIGN='LEFT'/>".join(instance_lines)
+            instance_row = (
+                "<TR><TD BGCOLOR='#eef2ff'><FONT COLOR='#1a365d'>"
+                f"{instance_html}"
+                "</FONT></TD></TR>"
+            )
+
         return (
             "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
             f"<TR><TD BGCOLOR='{cell.color}' COLOR='{cell.font_color}'><FONT COLOR='{cell.font_color}'>{subnet_html}</FONT></TD></TR>"
             f"<TR><TD PORT='routes' BGCOLOR='#fff6d1'><FONT COLOR='#5c3d0c'>{route_html}</FONT></TD></TR>"
+            f"{instance_row}"
             "</TABLE>>"
         )
 
@@ -427,7 +515,14 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 route_table = route_table_by_id.get(associated_route_table) if associated_route_table else None
                 tier_key, isolated = classify_subnet(subnet, route_table)
                 route_summary = route_summaries(route_table)
-                cell = subnet_cell(subnet, tier_key, tier_key if tier_key != "public" else "public", isolated, route_summary)
+                cell = subnet_cell(
+                    subnet,
+                    tier_key,
+                    tier_key if tier_key != "public" else "public",
+                    isolated,
+                    route_summary,
+                    instances_by_subnet.get(subnet_id, []),
+                )
                 az = cell.az or ""
                 if az not in cells:
                     cells[az] = []
@@ -720,6 +815,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     shape="plaintext",
                 )
                 legend.node(
+                    f"legend_instances_{vpc_id}",
+                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#eef2ff'>Instances</TD></TR></TABLE>>",
+                    shape="plaintext",
+                )
+                legend.node(
                     f"legend_igw_{vpc_id}",
                     "<<B>Internet Gateway / Internet</B>>",
                     shape="plaintext",
@@ -728,7 +828,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 legend.edge(f"legend_private_{vpc_id}", f"legend_isolated_{vpc_id}", style="invis")
                 legend.edge(f"legend_isolated_{vpc_id}", f"legend_nat_{vpc_id}", style="invis")
                 legend.edge(f"legend_nat_{vpc_id}", f"legend_vpce_{vpc_id}", style="invis")
-                legend.edge(f"legend_vpce_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
+                legend.edge(f"legend_vpce_{vpc_id}", f"legend_instances_{vpc_id}", style="invis")
+                legend.edge(f"legend_instances_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
