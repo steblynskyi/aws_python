@@ -1,6 +1,7 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
+import html
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import boto3
@@ -21,31 +22,93 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         return None
 
     ec2 = session.client("ec2")
+    palette = {
+        "background": "#f8fafc",
+        "text": "#1f2933",
+        "muted_text": "#52606d",
+        "outline": "#cbd2d9",
+        "accent_public": "#0d9488",
+        "accent_private": "#1d4ed8",
+        "accent_main": "#b7791f",
+        "fill_public": "#e6fffa",
+        "fill_private": "#e0ecff",
+        "fill_main": "#fff4db",
+        "fill_vpc_public": "#f3fbfb",
+        "fill_vpc_private": "#f4f7ff",
+        "fill_edge": "#eef2ff",
+    }
+
     graph = Digraph("aws_network", format="png")
     graph.attr(
         rankdir="TB",
-        bgcolor="white",
+        bgcolor=palette["background"],
         fontname="Helvetica",
         fontsize="12",
+        fontcolor=palette["text"],
         labelloc="t",
-        pad="0.5",
-        nodesep="0.6",
+        pad="0.4",
+        nodesep="0.5",
         ranksep="1.0 equally",
         splines="ortho",
     )
     graph.node_attr.update(
         fontname="Helvetica",
         fontsize="10",
-        color="#4a5568",
+        color=palette["outline"],
         style="filled",
         fillcolor="white",
+        fontcolor=palette["text"],
     )
     graph.edge_attr.update(
         fontname="Helvetica",
         fontsize="9",
-        color="#4a5568",
-        arrowsize="0.8",
+        color=palette["outline"],
+        arrowsize="0.7",
+        penwidth="1.2",
     )
+
+    def html_panel_label(
+        title: str,
+        *,
+        subtitle: Optional[str] = None,
+        metadata: Optional[Iterable[str]] = None,
+        accent: Optional[str] = None,
+    ) -> str:
+        """Create a neatly formatted HTML-like label for nodes."""
+
+        parts: List[str] = ["<", "<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'>"]
+        if title:
+            safe_title = html.escape(title)
+            if accent:
+                parts.append(
+                    "<TR><TD ALIGN='LEFT'><FONT FACE='Helvetica' COLOR='{accent}'><B>{title}</B></FONT></TD></TR>".format(
+                        accent=accent, title=safe_title
+                    )
+                )
+            else:
+                parts.append(
+                    "<TR><TD ALIGN='LEFT'><FONT FACE='Helvetica'><B>{}</B></FONT></TD></TR>".format(
+                        safe_title
+                    )
+                )
+
+        if subtitle:
+            parts.append(
+                "<TR><TD ALIGN='LEFT'><FONT FACE='Helvetica' COLOR='{color}'>{subtitle}</FONT></TD></TR>".format(
+                    color=palette["text"], subtitle=html.escape(subtitle)
+                )
+            )
+
+        for line in metadata or []:
+            parts.append(
+                "<TR><TD ALIGN='LEFT'><FONT FACE='Helvetica' POINT-SIZE='9' COLOR='{color}'>{line}</FONT></TD></TR>".format(
+                    color=palette["muted_text"], line=html.escape(line)
+                )
+            )
+
+        parts.append("</TABLE>")
+        parts.append(">")
+        return "".join(parts)
 
     def extract_name_tag(resource: dict) -> str:
         return next(
@@ -110,12 +173,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     graph.node(
         "internet",
-        "Internet",
+        html_panel_label("Internet"),
         shape="oval",
-        color="lightblue",
-        style="filled",
-        fillcolor="aliceblue",
-        penwidth="2",
+        color=palette["accent_public"],
+        penwidth="1.6",
+        fillcolor="#ecfeff",
     )
 
     gateway_nodes: Dict[str, Tuple[str, Dict[str, str], str]] = {}
@@ -125,12 +187,20 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     edge_graph = Digraph(name="cluster_edge")
     edge_graph.attr(
         label="Edge & Shared Connectivity",
-        color="#cbd5f5",
-        style="rounded,dashed",
-        bgcolor="#f8fbff",
+        color=palette["outline"],
+        style="rounded",
+        bgcolor=palette["fill_edge"],
         fontname="Helvetica",
+        fontcolor=palette["text"],
     )
-    edge_graph.node_attr.update(fontname="Helvetica", fontsize="10")
+    edge_graph.node_attr.update(
+        fontname="Helvetica",
+        fontsize="10",
+        fontcolor=palette["text"],
+        color=palette["outline"],
+        style="filled",
+        fillcolor="white",
+    )
 
     def ensure_gateway_node(
         node_id: str, label: str, attrs: Dict[str, str], owner_vpc: str
@@ -142,6 +212,8 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             "shape": "box",
             "style": "filled",
             "fillcolor": "white",
+            "fontcolor": palette["text"],
+            "color": palette["outline"],
         }
         node_attrs.update(attrs)
         edge_graph.node(node_id, label, **node_attrs)
@@ -158,31 +230,80 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             # Focus on default or NAT routes to keep the diagram readable.
             return None
 
-        target_mappings: Iterable[Tuple[str, str, str, Dict[str, str]]] = (
-            ("GatewayId", "igw-", "Internet Gateway", {"shape": "Msquare"}),
+        target_mappings: Iterable[Tuple[str, str, str, Dict[str, str], str]] = (
+            (
+                "GatewayId",
+                "igw-",
+                "Internet Gateway",
+                {"shape": "Msquare"},
+                palette["accent_public"],
+            ),
             (
                 "EgressOnlyInternetGatewayId",
                 "eigw-",
                 "Egress-Only Internet Gateway",
                 {"shape": "Msquare"},
+                palette["accent_public"],
             ),
-            ("NatGatewayId", "nat-", "NAT Gateway", {"shape": "box", "style": "rounded"}),
-            ("TransitGatewayId", "tgw-", "Transit Gateway", {"shape": "hexagon"}),
-            ("VpcPeeringConnectionId", "pcx-", "VPC Peering", {"shape": "doublecircle"}),
+            (
+                "NatGatewayId",
+                "nat-",
+                "NAT Gateway",
+                {"shape": "box", "style": "rounded"},
+                palette["accent_main"],
+            ),
+            (
+                "TransitGatewayId",
+                "tgw-",
+                "Transit Gateway",
+                {"shape": "hexagon"},
+                palette["accent_private"],
+            ),
+            (
+                "VpcPeeringConnectionId",
+                "pcx-",
+                "VPC Peering",
+                {"shape": "doublecircle"},
+                palette["accent_private"],
+            ),
         )
 
-        for key, prefix, label, attrs in target_mappings:
+        for key, prefix, label, attrs, accent in target_mappings:
             value = route.get(key)
             if value and value.startswith(prefix):
-                return value, f"{value}\n{label}", attrs
+                return (
+                    value,
+                    html_panel_label(
+                        value,
+                        metadata=[label, f"Destination: {destination}"],
+                        accent=accent,
+                    ),
+                    attrs,
+                )
 
         instance_id = route.get("InstanceId")
         if instance_id:
-            return instance_id, f"{instance_id}\nInstance", {"shape": "oval"}
+            return (
+                instance_id,
+                html_panel_label(
+                    instance_id,
+                    metadata=["Instance target", f"Destination: {destination}"],
+                    accent=palette["accent_private"],
+                ),
+                {"shape": "oval"},
+            )
 
         eni_id = route.get("NetworkInterfaceId")
         if eni_id:
-            return eni_id, f"{eni_id}\nENI", {"shape": "component"}
+            return (
+                eni_id,
+                html_panel_label(
+                    eni_id,
+                    metadata=["ENI target", f"Destination: {destination}"],
+                    accent=palette["accent_private"],
+                ),
+                {"shape": "component"},
+            )
 
         return None
 
@@ -224,7 +345,13 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             vpc_label += f"\n{vpc['CidrBlock']}"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
-            vpc_graph.attr(label=vpc_label, style="rounded", color="gray")
+            vpc_graph.attr(
+                label=vpc_label,
+                style="rounded",
+                color=palette["outline"],
+                fontcolor=palette["text"],
+                bgcolor="white",
+            )
 
             public_subgraph_name = f"cluster_{vpc_id}_public"
             private_subgraph_name = f"cluster_{vpc_id}_private"
@@ -235,11 +362,16 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             with vpc_graph.subgraph(name=public_subgraph_name) as public_graph:
                 public_graph.attr(
                     label="Public Routes & Subnets",
-                    color="darkseagreen",
+                    color=palette["accent_public"],
                     style="rounded",
-                    bgcolor="mintcream",
+                    bgcolor=palette["fill_vpc_public"],
+                    fontcolor=palette["accent_public"],
                 )
-                public_graph.node_attr.update(style="filled", fillcolor="honeydew")
+                public_graph.node_attr.update(
+                    style="filled",
+                    fillcolor=palette["fill_public"],
+                    color=palette["accent_public"],
+                )
                 public_anchor = f"{vpc_id}_public_anchor"
                 public_graph.node(
                     public_anchor,
@@ -254,11 +386,16 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             with vpc_graph.subgraph(name=private_subgraph_name) as private_graph:
                 private_graph.attr(
                     label="Private Routes & Subnets",
-                    color="lightsteelblue",
+                    color=palette["accent_private"],
                     style="rounded",
-                    bgcolor="ghostwhite",
+                    bgcolor=palette["fill_vpc_private"],
+                    fontcolor=palette["accent_private"],
                 )
-                private_graph.node_attr.update(style="filled", fillcolor="azure")
+                private_graph.node_attr.update(
+                    style="filled",
+                    fillcolor=palette["fill_private"],
+                    color=palette["accent_private"],
+                )
                 private_anchor = f"{vpc_id}_private_anchor"
                 private_graph.node(
                     private_anchor,
@@ -289,21 +426,25 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         "public" if is_public_route_table(route_table) else "private"
                     )
 
-                label_lines: List[str] = []
-                if name_tag:
-                    label_lines.append(name_tag)
-                label_lines.append(route_table_id)
-                if classification == "main":
-                    label_lines.append("(Main)")
+                metadata: List[str] = [f"ID: {route_table_id}"]
+                subtitle_text: Optional[str] = None
 
                 if classification == "main":
+                    if name_tag:
+                        subtitle_text = "Main Route Table"
+                    metadata.append("Role: Main")
                     vpc_graph.node(
                         route_table_id,
-                        "\n".join(label_lines),
+                        html_panel_label(
+                            name_tag or "Main Route Table",
+                            subtitle=subtitle_text,
+                            metadata=metadata,
+                            accent=palette["accent_main"],
+                        ),
                         shape="folder",
                         style="rounded,filled",
-                        fillcolor="#fff1cc",
-                        color="goldenrod",
+                        fillcolor=palette["fill_main"],
+                        color=palette["accent_main"],
                         group=f"{vpc_id}_main",
                     )
                     graph.edge(
@@ -322,11 +463,26 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     is_public = classification == "public"
                     target_graph = public_graph if is_public else private_graph
                     group = public_group if is_public else private_group
-                    fillcolor = "#e6ffed" if is_public else "#e6f0ff"
-                    border_color = "darkseagreen" if is_public else "steelblue"
+                    fillcolor = (
+                        palette["fill_public"] if is_public else palette["fill_private"]
+                    )
+                    border_color = (
+                        palette["accent_public"] if is_public else palette["accent_private"]
+                    )
+                    if name_tag:
+                        subtitle_text = "Public Route Table" if is_public else "Private Route Table"
+                    metadata.append("Role: Public" if is_public else "Role: Private")
                     target_graph.node(
                         route_table_id,
-                        "\n".join(label_lines),
+                        html_panel_label(
+                            name_tag
+                            or ("Public Route Table" if is_public else "Private Route Table"),
+                            subtitle=subtitle_text,
+                            metadata=metadata,
+                            accent=palette["accent_public"]
+                            if is_public
+                            else palette["accent_private"],
+                        ),
                         shape="folder",
                         style="rounded,filled",
                         fillcolor=fillcolor,
@@ -362,18 +518,22 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 visibility_label = "Public" if public else "Private"
                 subnet_label_lines: List[str] = []
                 name_tag = extract_name_tag(subnet)
-                if name_tag:
-                    subnet_label_lines.append(name_tag)
-                subnet_label_lines.append(subnet_id)
                 if cidr:
-                    subnet_label_lines.append(cidr)
+                    subnet_label_lines.append(f"CIDR: {cidr}")
                 az = subnet.get("AvailabilityZone")
                 if az:
-                    subnet_label_lines.append(az)
-                subnet_label_lines.append(f"({visibility_label})")
-                subnet_label = "\n".join(subnet_label_lines)
+                    subnet_label_lines.append(f"AZ: {az}")
+                subnet_label_lines.append(f"Visibility: {visibility_label}")
+                subnet_label_lines.append(f"ID: {subnet_id}")
+                subnet_label = html_panel_label(
+                    name_tag or ("Public Subnet" if public else "Private Subnet"),
+                    metadata=subnet_label_lines,
+                    accent=palette["accent_public"] if public else palette["accent_private"],
+                )
                 target_graph = public_graph if public else private_graph
-                node_color = "#b6f2b6" if public else "#d2dcff"
+                node_color = (
+                    palette["fill_public"] if public else palette["fill_private"]
+                )
                 group = public_group if public else private_group
                 target_graph.node(
                     subnet_id,
@@ -381,7 +541,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     shape="box",
                     style="rounded,filled",
                     fillcolor=node_color,
-                    color="darkseagreen" if public else "steelblue",
+                    color=palette["accent_public"]
+                    if public
+                    else palette["accent_private"],
                     group=group,
                 )
 
@@ -403,9 +565,19 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     label = (
                         f"{name}\n{instance['InstanceId']}" if name else instance["InstanceId"]
                     )
+                    instance_metadata = [f"ID: {instance['InstanceId']}"]
+                    instance_type = instance.get("InstanceType")
+                    if instance_type:
+                        instance_metadata.append(f"Type: {instance_type}")
                     graph.node(
                         instance["InstanceId"],
-                        label,
+                        html_panel_label(
+                            name or "EC2 Instance",
+                            metadata=instance_metadata,
+                            accent=palette["accent_public"]
+                            if public
+                            else palette["accent_private"],
+                        ),
                         shape="oval",
                         style="filled",
                         fillcolor="white",
@@ -431,22 +603,36 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     if subnet_by_vpc:
         with graph.subgraph(name="cluster_legend") as legend:
-            legend.attr(label="Legend", color="gray", style="dashed")
+            legend.attr(
+                label="Legend",
+                color=palette["outline"],
+                fontcolor=palette["text"],
+                style="rounded",
+                bgcolor="white",
+            )
             legend.node(
                 "legend_public_subnet",
-                "Public Subnet",
+                html_panel_label(
+                    "Public Subnet",
+                    metadata=["Visibility: Public", "Color: Teal"],
+                    accent=palette["accent_public"],
+                ),
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#b6f2b6",
-                color="darkseagreen",
+                fillcolor=palette["fill_public"],
+                color=palette["accent_public"],
             )
             legend.node(
                 "legend_private_subnet",
-                "Private Subnet",
+                html_panel_label(
+                    "Private Subnet",
+                    metadata=["Visibility: Private", "Color: Indigo"],
+                    accent=palette["accent_private"],
+                ),
                 shape="box",
                 style="rounded,filled",
-                fillcolor="#d2dcff",
-                color="steelblue",
+                fillcolor=palette["fill_private"],
+                color=palette["accent_private"],
             )
             legend.edge(
                 "legend_public_subnet",
@@ -455,47 +641,59 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             )
             legend.node(
                 "legend_main_rt",
-                "Main Route Table",
+                html_panel_label(
+                    "Main Route Table",
+                    metadata=["Color: Amber"],
+                    accent=palette["accent_main"],
+                ),
                 shape="folder",
                 style="rounded,filled",
-                fillcolor="#fff1cc",
-                color="goldenrod",
+                fillcolor=palette["fill_main"],
+                color=palette["accent_main"],
             )
             legend.node(
                 "legend_public_rt",
-                "Public Route Table",
+                html_panel_label(
+                    "Public Route Table",
+                    metadata=["Color: Teal"],
+                    accent=palette["accent_public"],
+                ),
                 shape="folder",
                 style="rounded,filled",
-                fillcolor="#e6ffed",
-                color="darkseagreen",
+                fillcolor=palette["fill_public"],
+                color=palette["accent_public"],
             )
             legend.node(
                 "legend_private_rt",
-                "Private Route Table",
+                html_panel_label(
+                    "Private Route Table",
+                    metadata=["Color: Indigo"],
+                    accent=palette["accent_private"],
+                ),
                 shape="folder",
                 style="rounded,filled",
-                fillcolor="#e6f0ff",
-                color="steelblue",
+                fillcolor=palette["fill_private"],
+                color=palette["accent_private"],
             )
             legend.edge("legend_main_rt", "legend_public_rt", style="invis")
             legend.edge("legend_public_rt", "legend_private_rt", style="invis")
             legend.node(
                 "legend_nat_gateway",
-                "NAT Gateway",
+                html_panel_label("NAT Gateway", metadata=["Shared connectivity"]),
                 shape="box",
                 style="rounded,filled",
                 fillcolor="white",
             )
             legend.node(
                 "legend_igw",
-                "Internet Gateway",
+                html_panel_label("Internet Gateway", metadata=["Public egress"]),
                 shape="Msquare",
                 style="filled",
                 fillcolor="white",
             )
             legend.node(
                 "legend_instance",
-                "EC2 Instance",
+                html_panel_label("EC2 Instance", metadata=["Instance node"]),
                 shape="oval",
                 style="filled",
                 fillcolor="white",
