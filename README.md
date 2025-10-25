@@ -54,6 +54,7 @@ aws_security_audit/
 - AWS credentials with read access to the audited services
 - Optional: `graphviz` (Python package and system binaries) to create
   topology diagrams
+- Optional: `openpyxl` to export findings to Excel workbooks
 
 Install dependencies with:
 
@@ -65,12 +66,13 @@ pip install boto3 graphviz
 
 ```bash
 python -m aws_security_audit --profile myprofile --region us-east-1 \
-  --json findings.json --diagram network
+  --json findings.json --excel findings.xlsx --diagram network
 ```
 
 - `--services` allows limiting the scan to specific services (e.g.
   `--services s3 iam`).
 - `--json` exports the findings to a JSON file for further processing.
+- `--excel` exports the findings to an Excel workbook (requires `openpyxl`).
 - `--diagram` writes a `graphviz` diagram (the script appends the
   extension based on the renderer format).
 
