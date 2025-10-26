@@ -21,6 +21,7 @@ aws_security_audit/
 │   ├── ecs.py
 │   ├── eks.py
 │   ├── iam.py
+│   ├── kms.py
 │   ├── rds.py
 │   ├── route53.py
 │   ├── s3.py
@@ -39,6 +40,7 @@ aws_security_audit/
   block configuration.
 - Evaluates IAM users for MFA enrollment and aged access keys.
 - Detects RDS databases that are public or unencrypted.
+- Audits KMS keys for disabled rotation and other metadata issues.
 - Checks Route53 hosted zones for DNSSEC coverage.
 - Flags ACM certificates that are near expiration or unused.
 - Reports on Systems Manager managed instances that are offline or

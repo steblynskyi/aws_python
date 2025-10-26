@@ -11,6 +11,7 @@ from .ec2 import audit_ec2_instances
 from .ecs import audit_ecs_clusters
 from .eks import audit_eks_clusters
 from .iam import audit_iam_users
+from .kms import audit_kms_keys
 from .rds import audit_rds_instances
 from .route53 import audit_route53_zones
 from .s3 import audit_s3_buckets
@@ -25,6 +26,7 @@ SERVICE_CHECKS: Dict[str, ServiceChecker] = {
     "s3": audit_s3_buckets,
     "iam": audit_iam_users,
     "rds": audit_rds_instances,
+    "kms": audit_kms_keys,
     "route53": audit_route53_zones,
     "acm": audit_acm_certificates,
     "ssm": audit_ssm_managed_instances,
