@@ -64,6 +64,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+<powershell>
+py -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+</powershell>
+
 > **Note:** The `graphviz` package in `requirements.txt` installs the Python
 > bindings. Rendering diagrams also requires the Graphviz system binaries to
 > be available on your PATH.
