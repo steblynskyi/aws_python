@@ -1,8 +1,9 @@
-"""Shared data structures for network diagram rendering."""
+"""Shared dataclasses and helpers for network diagram rendering."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from html import escape
+from typing import Iterable, List, Optional
 
 
 @dataclass
@@ -73,9 +74,33 @@ class SubnetCell:
     instances: List[InstanceSummary]
 
 
+@dataclass
+class GlobalServiceSummary:
+    """Aggregated information for services that do not live within a VPC."""
+
+    title: str
+    lines: List[str]
+    fillcolor: str
+    fontcolor: str
+
+
+def summarize_global_service_lines(
+    items: Iterable[str], max_items: int
+) -> List[str]:
+    """Return HTML-safe lines truncated for compact global service panels."""
+
+    sanitized = [escape(item) for item in items]
+    limited = sanitized[:max_items]
+    if len(sanitized) > max_items:
+        limited.append(escape(f"… (+{len(sanitized) - max_items} more)"))
+    return limited
+
+
 __all__ = [
     "InstanceSummary",
     "RouteDetail",
     "RouteSummary",
     "SubnetCell",
+    "GlobalServiceSummary",
+    "summarize_global_service_lines",
 ]
