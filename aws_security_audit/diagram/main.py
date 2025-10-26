@@ -14,9 +14,14 @@ try:  # Optional dependency used for diagram generation
 except Exception:  # pragma: no cover - library is optional
     Digraph = None  # type: ignore
 
+from .acm import build_acm_summary
 from .ec2 import group_instances_by_subnet
-from .models import InstanceSummary, RouteSummary, SubnetCell
+from .iam import build_iam_summary
+from .kms import build_kms_summary
+from .models import GlobalServiceSummary, InstanceSummary, RouteSummary, SubnetCell
+from .route53 import build_route53_summary
 from .rds import group_rds_instances_by_vpc
+from .s3 import build_s3_summary
 from .vpc import (
     build_route_table_indexes,
     build_subnet_cell,
@@ -87,6 +92,42 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         db_instances = list(safe_paginate(rds, "describe_db_instances", "DBInstances"))
     except (ClientError, EndpointConnectionError):
         db_instances = []
+
+    max_service_items = 8
+
+    service_builders = (
+        build_kms_summary,
+        build_s3_summary,
+        build_acm_summary,
+        build_route53_summary,
+        build_iam_summary,
+    )
+
+    global_services: List[GlobalServiceSummary] = []
+    for builder in service_builders:
+        try:
+            summary = builder(session, max_service_items)
+        except (ClientError, EndpointConnectionError):
+            summary = None
+        if summary:
+            global_services.append(summary)
+
+    has_global_services = bool(global_services)
+
+    def build_global_service_label(summary: GlobalServiceSummary) -> str:
+        label = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
+        label += (
+            "<TR><TD BGCOLOR='{}'><FONT COLOR='{}'><B>{}</B></FONT></TD></TR>".format(
+                summary.fillcolor, summary.fontcolor, escape(summary.title)
+            )
+        )
+        if summary.lines:
+            for line in summary.lines:
+                label += f"<TR><TD ALIGN='LEFT'>{line}</TD></TR>"
+        else:
+            label += "<TR><TD ALIGN='LEFT'>No resources found</TD></TR>"
+        label += "</TABLE>>"
+        return label
 
     subnet_by_vpc = group_subnets_by_vpc(subnets)
     (
@@ -547,6 +588,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     "<<B>Internet Gateway / Internet</B>>",
                     shape="plaintext",
                 )
+                if has_global_services:
+                    legend.node(
+                        f"legend_global_service_{vpc_id}",
+                        "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#f7fafc'>Global service summary</TD></TR></TABLE>>",
+                        shape="plaintext",
+                    )
                 legend.edge(f"legend_public_{vpc_id}", f"legend_private_{vpc_id}", style="invis")
                 legend.edge(f"legend_private_{vpc_id}", f"legend_isolated_{vpc_id}", style="invis")
                 legend.edge(f"legend_isolated_{vpc_id}", f"legend_nat_{vpc_id}", style="invis")
@@ -554,6 +601,34 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 legend.edge(f"legend_vpce_{vpc_id}", f"legend_instances_{vpc_id}", style="invis")
                 legend.edge(f"legend_instances_{vpc_id}", f"legend_rds_{vpc_id}", style="invis")
                 legend.edge(f"legend_rds_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
+                if has_global_services:
+                    legend.edge(
+                        f"legend_igw_{vpc_id}",
+                        f"legend_global_service_{vpc_id}",
+                        style="invis",
+                    )
+
+    if has_global_services:
+        with graph.subgraph(name="cluster_global_services") as global_graph:
+            global_graph.attr(
+                label="<<B>Global / Regional Services</B>>",
+                style="rounded",
+                color="#4a5568",
+                bgcolor="#f7fafc",
+                fontsize="12",
+                fontname="Helvetica",
+            )
+            previous_node: Optional[str] = None
+            for index, summary in enumerate(global_services):
+                node_id = f"global_service_{index}"
+                global_graph.node(
+                    node_id,
+                    build_global_service_label(summary),
+                    shape="plaintext",
+                )
+                if previous_node is not None:
+                    global_graph.edge(previous_node, node_id, style="invis")
+                previous_node = node_id
 
     rendered_path = graph.render(output_path, cleanup=True)
     return rendered_path
