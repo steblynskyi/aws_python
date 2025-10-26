@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AwsSecurityAuditToolkitReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "acm:DescribeCertificate",
+        "acm:ListCertificates",
+        "ec2:DescribeInstances",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeNetworkAcls",
+        "ec2:DescribeVpcPeeringConnections",
+        "ec2:DescribeVpnConnections",
+        "ecs:DescribeClusters",
+        "ecs:ListClusters",
+        "eks:DescribeCluster",
+        "eks:ListClusters",
+        "iam:ListAccessKeys",
+        "iam:ListMFADevices",
+        "iam:ListUsers",
+        "kms:DescribeKey",
+        "kms:GetKeyRotationStatus",
+        "kms:ListAliases",
+        "kms:ListKeys",
+        "rds:DescribeDBInstances",
+        "route53:GetDNSSEC",
+        "route53:ListHostedZones",
+        "s3:GetBucketAcl",
+        "s3:GetBucketEncryption",
+        "s3:GetPublicAccessBlock",
+        "s3:ListAllMyBuckets",
+        "ssm:DescribeInstanceInformation"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
