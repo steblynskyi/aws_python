@@ -6,7 +6,7 @@ This directory documents the AWS Identity and Access Management (IAM) permission
 
 The toolkit queries the following AWS services and requires the associated IAM actions:
 
-- **Amazon S3** &ndash; `s3:ListAllMyBuckets`, `s3:GetBucketAcl`, `s3:GetPublicAccessBlock`, `s3:GetBucketEncryption`
+- **Amazon S3** &ndash; `s3:ListAllMyBuckets`, `s3:GetBucketAcl`, `s3:GetBucketPublicAccessBlock`, `s3:GetEncryptionConfiguration`
 - **AWS Certificate Manager (ACM)** &ndash; `acm:ListCertificates`, `acm:DescribeCertificate`
 - **Amazon EC2** &ndash; `ec2:DescribeInstances`, `ec2:DescribeVolumes`
 - **Amazon VPC** &ndash; `ec2:DescribeSecurityGroups`, `ec2:DescribeNetworkAcls`, `ec2:DescribeVpcPeeringConnections`, `ec2:DescribeVpnConnections`
