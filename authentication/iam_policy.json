@@ -7,12 +7,7 @@
       "Action": [
         "acm:DescribeCertificate",
         "acm:ListCertificates",
-        "ec2:DescribeInstances",
-        "ec2:DescribeVolumes",
-        "ec2:DescribeSecurityGroups",
-        "ec2:DescribeNetworkAcls",
-        "ec2:DescribeVpcPeeringConnections",
-        "ec2:DescribeVpnConnections",
+        "ec2:Describe*",
         "ecs:DescribeClusters",
         "ecs:ListClusters",
         "eks:DescribeCluster",
