@@ -115,18 +115,18 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     has_global_services = bool(global_services)
 
     def build_global_service_label(summary: GlobalServiceSummary) -> str:
-        label = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
+        label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         label += (
-            "<TR><TD BGCOLOR='{}'><FONT COLOR='{}'><B>{}</B></FONT></TD></TR>".format(
+            '<TR><TD BGCOLOR="{}"><FONT COLOR="{}"><B>{}</B></FONT></TD></TR>'.format(
                 summary.fillcolor, summary.fontcolor, escape(summary.title)
             )
         )
         if summary.lines:
             for line in summary.lines:
-                label += f"<TR><TD ALIGN='LEFT'>{line}</TD></TR>"
+                label += f'<TR><TD ALIGN="LEFT">{line}</TD></TR>'
         else:
-            label += "<TR><TD ALIGN='LEFT'>No resources found</TD></TR>"
-        label += "</TABLE>>"
+            label += '<TR><TD ALIGN="LEFT">No resources found</TD></TR>'
+        label += '</TABLE>>'
         return label
 
     subnet_by_vpc = group_subnets_by_vpc(subnets)
@@ -161,7 +161,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         dhcp_options_id = vpc.get("DhcpOptionsId")
         if dhcp_options_id and dhcp_options_id != "default":
             vpc_label_lines.append(f"DHCP Options: {dhcp_options_id}")
-        vpc_label = "<" + "<BR ALIGN='LEFT'/>".join(vpc_label_lines) + ">"
+        vpc_label = "<" + '<BR ALIGN="LEFT"/>'.join(vpc_label_lines) + ">"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
             vpc_graph.attr(
@@ -263,9 +263,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     nat_lines.append(f"EIP: {escape(eip)}")
                 if subnet_id:
                     nat_lines.append(f"Subnet: {escape(subnet_id)}")
-                nat_label = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>" "<TR><TD BGCOLOR='#fff2cc'><FONT COLOR='#8a6d3b'>"
+                nat_label = (
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+                    '<TR><TD BGCOLOR="#fff2cc"><FONT COLOR="#8a6d3b">'
+                )
                 nat_label += "<BR/>".join(nat_lines)
-                nat_label += "</FONT></TD></TR></TABLE>>"
+                nat_label += '</FONT></TD></TR></TABLE>>'
                 node_name = f"{nat_id}_node"
                 az_key = az or (azs[len(azs) // 2] if azs else "")
                 if az_key not in tier_nodes["ingress"]:
@@ -467,10 +470,10 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 if status:
                     label_lines.append(f"Status: {escape(status)}")
 
-                label_html = "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
-                label_html += "<TR><TD BGCOLOR='#fdebd0'><FONT COLOR='#7b341e'>"
+                label_html = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+                label_html += '<TR><TD BGCOLOR="#fdebd0"><FONT COLOR="#7b341e">'
                 label_html += "<BR/>".join(label_lines) if label_lines else "RDS Instance"
-                label_html += "</FONT></TD></TR></TABLE>>"
+                label_html += '</FONT></TD></TR></TABLE>>'
 
                 node_name = f"rds_{identifier or 'instance'}"
                 node_name = node_name.replace("-", "_")
@@ -550,37 +553,37 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 )
                 legend.node(
                     f"legend_public_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#ccebd4'>Public subnet</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#ccebd4">Public subnet</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_private_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#cfe3ff'>Private subnet</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#cfe3ff">Private subnet</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_isolated_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#e2e2e2'>Isolated subnet</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#e2e2e2">Isolated subnet</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_nat_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#fff2cc'>NAT Gateway</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#fff2cc">NAT Gateway</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_vpce_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#e8e8ff'>VPC Endpoint</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#e8e8ff">VPC Endpoint</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_instances_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#eef2ff'>Instances</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#eef2ff">Instances</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
                     f"legend_rds_{vpc_id}",
-                    "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#fdebd0'>RDS Instance</TD></TR></TABLE>>",
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#fdebd0">RDS Instance</TD></TR></TABLE>>',
                     shape="plaintext",
                 )
                 legend.node(
@@ -591,7 +594,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 if has_global_services:
                     legend.node(
                         f"legend_global_service_{vpc_id}",
-                        "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BGCOLOR='#f7fafc'>Global service summary</TD></TR></TABLE>>",
+                        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD BGCOLOR="#f7fafc">Global service summary</TD></TR></TABLE>>',
                         shape="plaintext",
                     )
                 legend.edge(f"legend_public_{vpc_id}", f"legend_private_{vpc_id}", style="invis")
