@@ -289,7 +289,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 node_name = f"{igw_id}_node"
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{igw_id}</B><BR/>Internet Gateway>",
+                    f"<<B>{igw_id}</B><BR/>Internet Gateway>>",
                     shape="box",
                     style="rounded,filled,dashed",
                     color="#4a5568",
@@ -433,7 +433,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         endpoint_az = subnet_az_map.get(subnet_ids[0], center_az)
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{endpoint_id}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>",
+                    f"<<B>{endpoint_id}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>>",
                     shape="box",
                     style="rounded,filled",
                     fillcolor="#e8e8ff",
