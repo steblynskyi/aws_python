@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from html import escape
+from .html_utils import escape_label
 from typing import Iterable, List, Optional
 
 
@@ -89,10 +89,10 @@ def summarize_global_service_lines(
 ) -> List[str]:
     """Return HTML-safe lines truncated for compact global service panels."""
 
-    sanitized = [escape(item) for item in items]
+    sanitized = [escape_label(item) for item in items]
     limited = sanitized[:max_items]
     if len(sanitized) > max_items:
-        limited.append(escape(f"… (+{len(sanitized) - max_items} more)"))
+        limited.append(escape_label(f"… (+{len(sanitized) - max_items} more)"))
     return limited
 
 
