@@ -1,7 +1,7 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
-from .html_utils import escape_label
+from .html_utils import escape_label, format_vertical_label
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional
 
@@ -346,42 +346,54 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
                             label_map = {
                                 "egress_only_internet_gateway": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>Egress-Only IGW>>",
+                                    format_vertical_label(
+                                        [node_id, "Egress-Only IGW"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,filled,dashed",
                                     "#4a5568",
                                     "white",
                                 ),
                                 "transit_gateway": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>Transit Gateway>>",
+                                    format_vertical_label(
+                                        [node_id, "Transit Gateway"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,filled,dashed",
                                     "#2c5282",
                                     "#ebf8ff",
                                 ),
                                 "vpc_peering_connection": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>VPC Peering>>",
+                                    format_vertical_label(
+                                        [node_id, "VPC Peering"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
                                     "white",
                                 ),
                                 "virtual_private_gateway": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>Virtual Private Gateway>>",
+                                    format_vertical_label(
+                                        [node_id, "Virtual Private Gateway"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,filled,dashed",
                                     "#2c5282",
                                     "#edf2f7",
                                 ),
                                 "carrier_gateway": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>Carrier Gateway>>",
+                                    format_vertical_label(
+                                        [node_id, "Carrier Gateway"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
                                     "white",
                                 ),
                                 "local_gateway": (
-                                    f"<<B>{escape_label(node_id)}</B><BR/>Local Gateway>>",
+                                    format_vertical_label(
+                                        [node_id, "Local Gateway"], bold_first=True
+                                    ),
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
