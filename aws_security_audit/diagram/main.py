@@ -123,9 +123,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         )
         if summary.lines:
             for line in summary.lines:
-                label += f"<TR><TD ALIGN='LEFT'>{line}</TD></TR>"
+                label += f'<TR><TD ALIGN="LEFT">{escape(line)}</TD></TR>'
         else:
-            label += "<TR><TD ALIGN='LEFT'>No resources found</TD></TR>"
+            label += '<TR><TD ALIGN="LEFT">No resources found</TD></TR>'
         label += "</TABLE>>"
         return label
 
@@ -154,14 +154,14 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
         vpc_title = f"VPC {vpc_id}"
-        vpc_label_lines = [f"<B>{vpc_title}</B>"]
+        vpc_label_lines = [f"<B>{escape(vpc_title)}</B>"]
         cidr_block = vpc.get("CidrBlock")
         if cidr_block:
-            vpc_label_lines.append(cidr_block)
+            vpc_label_lines.append(escape(cidr_block))
         dhcp_options_id = vpc.get("DhcpOptionsId")
         if dhcp_options_id and dhcp_options_id != "default":
-            vpc_label_lines.append(f"DHCP Options: {dhcp_options_id}")
-        vpc_label = "<" + "<BR ALIGN='LEFT'/>".join(vpc_label_lines) + ">"
+            vpc_label_lines.append(f"DHCP Options: {escape(dhcp_options_id)}")
+        vpc_label = "<<" + '<BR ALIGN="LEFT"/>'.join(vpc_label_lines) + ">>"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
             vpc_graph.attr(
