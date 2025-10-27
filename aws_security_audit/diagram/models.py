@@ -21,6 +21,12 @@ class RouteDetail:
 
         target_text = self.description or self.target
         if target_text:
+            # Graphviz's HTML-like labels safely accept Unicode characters so
+            # long as they are encoded as XML character references (see
+            # https://graphviz.org/doc/info/shapes.html#html).  Our
+            # ``escape_label`` helper performs that conversion, which means we
+            # can use the human friendly right arrow here without upsetting the
+            # ``dot`` parser.
             base = f"{self.destination} → {target_text}"
         else:
             base = self.destination

@@ -9,8 +9,9 @@ def escape_label(value: str) -> str:
     """Return ``value`` escaped for use inside Graphviz HTML labels.
 
     Graphviz is fairly strict about the characters it accepts within HTML-like
-    labels.  In particular, hex character references such as ``&#x27;`` are not
-    universally supported across the versions that users may have installed.
+    labels (see https://graphviz.org/doc/info/shapes.html#html).  In particular,
+    hex character references such as ``&#x27;`` are not universally supported across
+    the versions that users may have installed.
     Additionally, certain non-ASCII characters (for example the Unicode arrow
     used in route descriptions) can trigger syntax errors when ``dot`` parses
     the generated diagram source.
