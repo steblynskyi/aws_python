@@ -8,14 +8,17 @@ try:
     from .main import generate_network_diagram
 except ModuleNotFoundError as exc:  # pragma: no cover - triggered when optional files missing
     if exc.name == "aws_security_audit.diagram.main":
+        _import_error = exc
 
-        def generate_network_diagram(*args: Any, **kwargs: Any) -> None:
+        def generate_network_diagram(
+            *args: Any, _exc: ModuleNotFoundError = _import_error, **kwargs: Any
+        ) -> None:
             """Placeholder that explains how to enable diagram generation."""
 
             raise ModuleNotFoundError(
                 "Network diagram support is unavailable. Ensure the optional "
                 "diagram modules are present and optional dependencies are installed."
-            ) from exc
+            ) from _exc
 
     else:
         raise
