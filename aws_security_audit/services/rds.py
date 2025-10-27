@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_rds_instances(session: boto3.session.Session) -> List[Finding]:
@@ -38,12 +38,7 @@ def audit_rds_instances(session: boto3.session.Session) -> List[Finding]:
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="RDS",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe RDS instances: {exc}",
-            )
+            finding_from_exception("RDS", "Failed to describe RDS instances", exc)
         )
     return findings
 

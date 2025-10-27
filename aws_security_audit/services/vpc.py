@@ -8,7 +8,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_vpcs(session: boto3.session.Session) -> List[Finding]:
@@ -40,12 +40,7 @@ def _audit_security_groups(ec2: BaseClient) -> List[Finding]:
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="VPC",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe security groups: {exc}",
-            )
+            finding_from_exception("VPC", "Failed to describe security groups", exc)
         )
     return findings
 
@@ -115,12 +110,7 @@ def _audit_network_acls(ec2: BaseClient) -> List[Finding]:
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="VPC",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe network ACLs: {exc}",
-            )
+            finding_from_exception("VPC", "Failed to describe network ACLs", exc)
         )
     return findings
 
@@ -144,11 +134,8 @@ def _audit_vpc_peering(ec2: BaseClient) -> List[Finding]:
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="VPC",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe VPC peering connections: {exc}",
+            finding_from_exception(
+                "VPC", "Failed to describe VPC peering connections", exc
             )
         )
     return findings
@@ -186,12 +173,7 @@ def _audit_vpn_connections(ec2: BaseClient) -> List[Finding]:
                     )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="VPC",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe VPN connections: {exc}",
-            )
+            finding_from_exception("VPC", "Failed to describe VPN connections", exc)
         )
     return findings
 

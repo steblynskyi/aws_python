@@ -8,7 +8,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_acm_certificates(session: boto3.session.Session) -> List[Finding]:
@@ -43,21 +43,16 @@ def audit_acm_certificates(session: boto3.session.Session) -> List[Finding]:
                     )
             except ClientError as exc:
                 findings.append(
-                    Finding(
-                        service="ACM",
+                    finding_from_exception(
+                        "ACM",
+                        "Failed to describe certificate",
+                        exc,
                         resource_id=arn,
-                        severity="ERROR",
-                        message=f"Failed to describe certificate: {exc}",
                     )
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="ACM",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to list certificates: {exc}",
-            )
+            finding_from_exception("ACM", "Failed to list certificates", exc)
         )
     return findings
 

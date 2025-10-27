@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_ec2_instances(session: boto3.session.Session) -> List[Finding]:
@@ -41,11 +41,11 @@ def audit_ec2_instances(session: boto3.session.Session) -> List[Finding]:
                             volume_cache[volume_id] = volume.get("Encrypted", False)
                         except (ClientError, EndpointConnectionError) as exc:
                             findings.append(
-                                Finding(
-                                    service="EC2",
+                                finding_from_exception(
+                                    "EC2",
+                                    "Failed to describe EBS volume",
+                                    exc,
                                     resource_id=volume_id,
-                                    severity="ERROR",
-                                    message=f"Failed to describe EBS volume: {exc}",
                                 )
                             )
                             volume_cache[volume_id] = True
@@ -61,12 +61,7 @@ def audit_ec2_instances(session: boto3.session.Session) -> List[Finding]:
                         )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="EC2",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe EC2 instances: {exc}",
-            )
+            finding_from_exception("EC2", "Failed to describe EC2 instances", exc)
         )
     return findings
 

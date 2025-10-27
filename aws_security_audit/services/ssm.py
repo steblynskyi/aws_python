@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]:
@@ -39,12 +39,7 @@ def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]
                 )
     except ClientError as exc:
         findings.append(
-            Finding(
-                service="SSM",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe SSM instances: {exc}",
-            )
+            finding_from_exception("SSM", "Failed to describe SSM instances", exc)
         )
     except EndpointConnectionError:
         # Systems Manager is not available in every region.

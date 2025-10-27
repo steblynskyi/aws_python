@@ -7,6 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
+from ..utils import finding_from_exception
 
 
 def audit_s3_buckets(session: boto3.session.Session) -> List[Finding]:
@@ -17,14 +18,7 @@ def audit_s3_buckets(session: boto3.session.Session) -> List[Finding]:
     try:
         buckets = s3.list_buckets().get("Buckets", [])
     except (ClientError, EndpointConnectionError) as exc:
-        return [
-            Finding(
-                service="S3",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to list buckets: {exc}",
-            )
-        ]
+        return [finding_from_exception("S3", "Failed to list buckets", exc)]
 
     for bucket in buckets:
         name = bucket["Name"]
@@ -41,11 +35,17 @@ def _check_bucket_acl(s3: boto3.client, name: str) -> Iterable[Finding]:
         acl = s3.get_bucket_acl(Bucket=name)
     except (ClientError, EndpointConnectionError) as exc:
         code = _error_code(exc)
-        severity = "WARNING" if code == "AccessDenied" else "ERROR"
-        message = (
-            "Access denied while retrieving bucket ACL." if severity == "WARNING" else f"Failed to retrieve bucket ACL: {exc}"
-        )
-        yield Finding(service="S3", resource_id=name, severity=severity, message=message)
+        if code == "AccessDenied":
+            yield Finding(
+                service="S3",
+                resource_id=name,
+                severity="WARNING",
+                message="Access denied while retrieving bucket ACL.",
+            )
+        else:
+            yield finding_from_exception(
+                "S3", "Failed to retrieve bucket ACL", exc, resource_id=name
+            )
         return
 
     for grant in acl.get("Grants", []):
@@ -79,15 +79,26 @@ def _check_public_access_block(s3: boto3.client, name: str) -> Iterable[Finding]
     except (ClientError, EndpointConnectionError) as exc:
         code = _error_code(exc)
         if code == "NoSuchPublicAccessBlockConfiguration":
-            severity = "LOW"
-            message = "Public access block configuration is missing."
+            yield Finding(
+                service="S3",
+                resource_id=name,
+                severity="LOW",
+                message="Public access block configuration is missing.",
+            )
         elif code == "AccessDenied":
-            severity = "WARNING"
-            message = "Access denied while checking public access block configuration."
+            yield Finding(
+                service="S3",
+                resource_id=name,
+                severity="WARNING",
+                message="Access denied while checking public access block configuration.",
+            )
         else:
-            severity = "ERROR"
-            message = f"Failed to retrieve public access block configuration: {exc}"
-        yield Finding(service="S3", resource_id=name, severity=severity, message=message)
+            yield finding_from_exception(
+                "S3",
+                "Failed to retrieve public access block configuration",
+                exc,
+                resource_id=name,
+            )
         return
 
     config = pab.get("PublicAccessBlockConfiguration", {})
@@ -114,15 +125,23 @@ def _check_bucket_encryption(s3: boto3.client, name: str) -> Iterable[Finding]:
     except (ClientError, EndpointConnectionError) as exc:
         code = _error_code(exc)
         if code == "ServerSideEncryptionConfigurationNotFoundError":
-            severity = "HIGH"
-            message = "Bucket encryption is not enabled."
+            yield Finding(
+                service="S3",
+                resource_id=name,
+                severity="HIGH",
+                message="Bucket encryption is not enabled.",
+            )
         elif code == "AccessDenied":
-            severity = "WARNING"
-            message = "Access denied while checking default encryption."
+            yield Finding(
+                service="S3",
+                resource_id=name,
+                severity="WARNING",
+                message="Access denied while checking default encryption.",
+            )
         else:
-            severity = "ERROR"
-            message = f"Failed to check bucket encryption: {exc}"
-        yield Finding(service="S3", resource_id=name, severity=severity, message=message)
+            yield finding_from_exception(
+                "S3", "Failed to check bucket encryption", exc, resource_id=name
+            )
 
 
 def _error_code(exc: Exception) -> str:

@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import batch_iterable, safe_paginate
+from ..utils import batch_iterable, finding_from_exception, safe_paginate
 
 
 def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
@@ -25,11 +25,11 @@ def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
             except ClientError as exc:
                 for arn in batch:
                     findings.append(
-                        Finding(
-                            service="ECS",
+                        finding_from_exception(
+                            "ECS",
+                            "Failed to describe cluster",
+                            exc,
                             resource_id=arn,
-                            severity="ERROR",
-                            message=f"Failed to describe cluster: {exc}",
                         )
                     )
                 continue
@@ -56,12 +56,7 @@ def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
                     )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="ECS",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to list ECS clusters: {exc}",
-            )
+            finding_from_exception("ECS", "Failed to list ECS clusters", exc)
         )
     return findings
 
