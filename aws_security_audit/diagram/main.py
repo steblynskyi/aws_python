@@ -154,13 +154,13 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
         vpc_title = f"VPC {vpc_id}"
-        vpc_label_lines = [f"<B>{vpc_title}</B>"]
+        vpc_label_lines = [f"<B>{escape(vpc_title)}</B>"]
         cidr_block = vpc.get("CidrBlock")
         if cidr_block:
-            vpc_label_lines.append(cidr_block)
+            vpc_label_lines.append(escape(cidr_block))
         dhcp_options_id = vpc.get("DhcpOptionsId")
         if dhcp_options_id and dhcp_options_id != "default":
-            vpc_label_lines.append(f"DHCP Options: {dhcp_options_id}")
+            vpc_label_lines.append(f"DHCP Options: {escape(dhcp_options_id)}")
         vpc_label = "<" + '<BR ALIGN="LEFT"/>'.join(vpc_label_lines) + ">"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
@@ -256,7 +256,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     ),
                     None,
                 )
-                nat_lines = [f"<B>{nat_id}</B>"]
+                nat_lines = [f"<B>{escape(nat_id)}</B>"]
                 if az:
                     nat_lines.append(escape(az))
                 if eip:
@@ -292,7 +292,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 node_name = f"{igw_id}_node"
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{igw_id}</B><BR/>Internet Gateway>>",
+                    f"<<B>{escape(igw_id)}</B><BR/>Internet Gateway>>",
                     shape="box",
                     style="rounded,filled,dashed",
                     color="#4a5568",
@@ -436,7 +436,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         endpoint_az = subnet_az_map.get(subnet_ids[0], center_az)
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{endpoint_id}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>>",
+                    f"<<B>{escape(endpoint_id)}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>>",
                     shape="box",
                     style="rounded,filled",
                     fillcolor="#e8e8ff",
