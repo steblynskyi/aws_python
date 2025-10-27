@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import escape
+from subprocess import CalledProcessError
 from typing import Dict, List, Optional
 
 import boto3
@@ -11,8 +12,10 @@ from ..utils import safe_paginate
 
 try:  # Optional dependency used for diagram generation
     from graphviz import Digraph  # type: ignore
+    from graphviz.backend import ExecutableNotFound  # type: ignore
 except Exception:  # pragma: no cover - library is optional
     Digraph = None  # type: ignore
+    ExecutableNotFound = None  # type: ignore
 
 from .acm import build_acm_summary
 from .ec2 import group_instances_by_subnet
@@ -289,7 +292,10 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 node_name = f"{igw_id}_node"
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{igw_id}</B><BR/>Internet Gateway>",
+                    (
+                        f"<<B>{escape(igw_id)}</B>"
+                        "<BR/><FONT POINT-SIZE=\"10\">Internet Gateway</FONT>>"
+                    ),
                     shape="box",
                     style="rounded,filled,dashed",
                     color="#4a5568",
@@ -630,7 +636,16 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     global_graph.edge(previous_node, node_id, style="invis")
                 previous_node = node_id
 
-    rendered_path = graph.render(output_path, cleanup=True)
+    try:
+        rendered_path = graph.render(output_path, cleanup=True)
+    except Exception as exc:
+        if ExecutableNotFound is not None and isinstance(exc, ExecutableNotFound):
+            return None
+        if isinstance(exc, CalledProcessError):
+            stderr = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else exc.stderr
+            message = stderr.strip() or str(exc)
+            raise RuntimeError(f"graphviz failed to render the network diagram: {message}") from exc
+        raise
     return rendered_path
 
 
