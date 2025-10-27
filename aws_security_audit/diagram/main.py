@@ -1,7 +1,6 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional
 
@@ -23,7 +22,13 @@ from .acm import build_acm_summary
 from .ec2 import group_instances_by_subnet
 from .iam import build_iam_summary
 from .kms import build_kms_summary
-from .models import GlobalServiceSummary, InstanceSummary, SubnetCell
+from .models import (
+    DiagramContext,
+    Ec2Resources,
+    GlobalServiceSummary,
+    InstanceSummary,
+    SubnetCell,
+)
 from .route53 import build_route53_summary
 from .rds import group_rds_instances_by_vpc
 from .s3 import build_s3_summary
@@ -45,34 +50,6 @@ TIER_ORDER = [
     ("private_data", "Private Data Subnets"),
     ("shared", "Shared / Directories"),
 ]
-
-@dataclass
-class Ec2Resources:
-    """Raw EC2 resources required for the diagram."""
-
-    vpcs: List[dict]
-    subnets: List[dict]
-    route_tables: List[dict]
-    nat_gateways: List[dict]
-    internet_gateways: List[dict]
-    vpc_endpoints: List[dict]
-    reservations: List[dict]
-
-
-@dataclass
-class DiagramContext:
-    """Prepared context for rendering the VPC diagram."""
-
-    resources: Ec2Resources
-    subnets_by_vpc: Dict[str, List[dict]]
-    route_tables_by_vpc: Dict[str, List[dict]]
-    subnet_route_table: Dict[str, str]
-    main_route_table_by_vpc: Dict[str, str]
-    instances_by_subnet: Dict[str, List[InstanceSummary]]
-    rds_instances_by_vpc: Dict[str, List[dict]]
-    internet_gateways: Dict[str, dict]
-    vpc_endpoints_by_vpc: Dict[str, List[dict]]
-
 
 def build_global_service_label(summary: GlobalServiceSummary) -> str:
     """Render the HTML label used for the global services cluster."""
