@@ -159,14 +159,25 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     for vpc in vpcs:
         vpc_id = vpc["VpcId"]
         vpc_title = f"VPC {vpc_id}"
-        vpc_label = f"<<B>{escape(vpc_title)}</B>"
+        vpc_label_rows = [
+            f"<TR><TD ALIGN=\"LEFT\"><B>{escape(vpc_title)}</B></TD></TR>"
+        ]
         cidr_block = vpc.get("CidrBlock")
         if cidr_block:
-            vpc_label += f"<BR ALIGN=\"LEFT\"/>{escape(cidr_block)}"
+            vpc_label_rows.append(
+                f"<TR><TD ALIGN=\"LEFT\">{escape(cidr_block)}</TD></TR>"
+            )
         dhcp_options_id = vpc.get("DhcpOptionsId")
         if dhcp_options_id and dhcp_options_id != "default":
-            vpc_label += f"<BR ALIGN=\"LEFT\"/>DHCP Options: {escape(dhcp_options_id)}"
-        vpc_label += ">>"
+            vpc_label_rows.append(
+                "<TR><TD ALIGN=\"LEFT\">DHCP Options: "
+                f"{escape(dhcp_options_id)}</TD></TR>"
+            )
+        vpc_label = (
+            '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
+            + "".join(vpc_label_rows)
+            + "</TABLE>>"
+        )
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
             vpc_graph.attr(label=vpc_label)
