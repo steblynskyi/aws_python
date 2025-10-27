@@ -254,19 +254,19 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     subnet_lines = []
     if cell.name:
         subnet_lines.append(f"<B>{escape(cell.name)}</B>")
-    subnet_lines.append(f"<FONT POINT-SIZE='10'>{escape(cell.subnet_id)}</FONT>")
+    subnet_lines.append(f'<FONT POINT-SIZE="10">{escape(cell.subnet_id)}</FONT>')
     if cell.cidr:
         subnet_lines.append(escape(cell.cidr))
     if cell.az:
         subnet_lines.append(escape(cell.az))
     if cell.route_summary:
         subnet_lines.append(
-            f"<FONT POINT-SIZE='9' COLOR='#2d3748'><B>rt:</B> {escape(cell.route_summary.route_table_id)}</FONT>"
+            f'<FONT POINT-SIZE="9" COLOR="#2d3748"><B>rt:</B> {escape(cell.route_summary.route_table_id)}</FONT>'
         )
 
     subnet_html = "<BR/>".join(subnet_lines)
 
-    route_html = "<FONT POINT-SIZE='9' COLOR='#2d3748'><I>No non-local routes</I></FONT>"
+    route_html = '<FONT POINT-SIZE="9" COLOR="#2d3748"><I>No non-local routes</I></FONT>'
     if cell.route_summary:
         route_lines = []
         if cell.route_summary.name:
@@ -277,26 +277,26 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
                 route_lines.append(escape(route.display_text()))
         else:
             route_lines.append("No non-local routes")
-        route_html = "<BR ALIGN='LEFT'/>".join(route_lines)
+        route_html = '<BR ALIGN="LEFT"/>'.join(route_lines)
 
     instance_row = ""
     if cell.instances:
         instance_lines = ["<B>Instances</B>"]
         for instance in cell.instances:
             instance_lines.append(escape(instance.display_text()))
-        instance_html = "<BR ALIGN='LEFT'/>".join(instance_lines)
+        instance_html = '<BR ALIGN="LEFT"/>'.join(instance_lines)
         instance_row = (
-            "<TR><TD BGCOLOR='#eef2ff'><FONT COLOR='#1a365d'>"
+            '<TR><TD BGCOLOR="#eef2ff"><FONT COLOR="#1a365d">'
             f"{instance_html}"
-            "</FONT></TD></TR>"
+            '</FONT></TD></TR>'
         )
 
     return (
-        "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
-        f"<TR><TD BGCOLOR='{cell.color}' COLOR='{cell.font_color}'><FONT COLOR='{cell.font_color}'>{subnet_html}</FONT></TD></TR>"
-        f"<TR><TD PORT='routes' BGCOLOR='#fff6d1'><FONT COLOR='#5c3d0c'>{route_html}</FONT></TD></TR>"
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        f'<TR><TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
+        f'<TR><TD PORT="routes" BGCOLOR="#fff6d1"><FONT COLOR="#5c3d0c">{route_html}</FONT></TD></TR>'
         f"{instance_row}"
-        "</TABLE>>"
+        '</TABLE>>'
     )
 
 
