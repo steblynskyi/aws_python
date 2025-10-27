@@ -1,7 +1,7 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
-from html import escape
+from .html_utils import escape_label
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional
 
@@ -123,12 +123,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         label += (
             '<TR><TD BGCOLOR="{}"><FONT COLOR="{}"><B>{}</B></FONT></TD></TR>'.format(
-                summary.fillcolor, summary.fontcolor, escape(summary.title)
+                summary.fillcolor, summary.fontcolor, escape_label(summary.title)
             )
         )
         if summary.lines:
             for line in summary.lines:
-                label += f'<TR><TD ALIGN="LEFT">{escape(line)}</TD></TR>'
+                label += f'<TR><TD ALIGN="LEFT">{escape_label(line)}</TD></TR>'
         else:
             label += '<TR><TD ALIGN="LEFT">No resources found</TD></TR>'
         label += '</TABLE>>'
@@ -160,18 +160,18 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         vpc_id = vpc["VpcId"]
         vpc_title = f"VPC {vpc_id}"
         vpc_label_rows = [
-            f"<TR><TD ALIGN=\"LEFT\"><B>{escape(vpc_title)}</B></TD></TR>"
+            f"<TR><TD ALIGN=\"LEFT\"><B>{escape_label(vpc_title)}</B></TD></TR>"
         ]
         cidr_block = vpc.get("CidrBlock")
         if cidr_block:
             vpc_label_rows.append(
-                f"<TR><TD ALIGN=\"LEFT\">{escape(cidr_block)}</TD></TR>"
+                f"<TR><TD ALIGN=\"LEFT\">{escape_label(cidr_block)}</TD></TR>"
             )
         dhcp_options_id = vpc.get("DhcpOptionsId")
         if dhcp_options_id and dhcp_options_id != "default":
             vpc_label_rows.append(
                 "<TR><TD ALIGN=\"LEFT\">DHCP Options: "
-                f"{escape(dhcp_options_id)}</TD></TR>"
+                f"{escape_label(dhcp_options_id)}</TD></TR>"
             )
         vpc_label = (
             '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
@@ -272,11 +272,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 )
                 nat_lines = [f"<B>{nat_id}</B>"]
                 if az:
-                    nat_lines.append(escape(az))
+                    nat_lines.append(escape_label(az))
                 if eip:
-                    nat_lines.append(f"EIP: {escape(eip)}")
+                    nat_lines.append(f"EIP: {escape_label(eip)}")
                 if subnet_id:
-                    nat_lines.append(f"Subnet: {escape(subnet_id)}")
+                    nat_lines.append(f"Subnet: {escape_label(subnet_id)}")
                 nat_label = (
                     '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
                     '<TR><TD BGCOLOR="#fff2cc"><FONT COLOR="#8a6d3b">'
@@ -307,7 +307,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 vpc_graph.node(
                     node_name,
                     (
-                        f"<<B>{escape(igw_id)}</B>"
+                        f"<<B>{escape_label(igw_id)}</B>"
                         "<BR/><FONT POINT-SIZE=\"10\">Internet Gateway</FONT>>"
                     ),
                     shape="box",
@@ -346,42 +346,42 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
                             label_map = {
                                 "egress_only_internet_gateway": (
-                                    f"<<B>{escape(node_id)}</B><BR/>Egress-Only IGW>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>Egress-Only IGW>>",
                                     "box",
                                     "rounded,filled,dashed",
                                     "#4a5568",
                                     "white",
                                 ),
                                 "transit_gateway": (
-                                    f"<<B>{escape(node_id)}</B><BR/>Transit Gateway>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>Transit Gateway>>",
                                     "box",
                                     "rounded,filled,dashed",
                                     "#2c5282",
                                     "#ebf8ff",
                                 ),
                                 "vpc_peering_connection": (
-                                    f"<<B>{escape(node_id)}</B><BR/>VPC Peering>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>VPC Peering>>",
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
                                     "white",
                                 ),
                                 "virtual_private_gateway": (
-                                    f"<<B>{escape(node_id)}</B><BR/>Virtual Private Gateway>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>Virtual Private Gateway>>",
                                     "box",
                                     "rounded,filled,dashed",
                                     "#2c5282",
                                     "#edf2f7",
                                 ),
                                 "carrier_gateway": (
-                                    f"<<B>{escape(node_id)}</B><BR/>Carrier Gateway>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>Carrier Gateway>>",
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
                                     "white",
                                 ),
                                 "local_gateway": (
-                                    f"<<B>{escape(node_id)}</B><BR/>Local Gateway>>",
+                                    f"<<B>{escape_label(node_id)}</B><BR/>Local Gateway>>",
                                     "box",
                                     "rounded,dashed",
                                     "#2c5282",
@@ -453,7 +453,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                         endpoint_az = subnet_az_map.get(subnet_ids[0], center_az)
                 vpc_graph.node(
                     node_name,
-                    f"<<B>{escape(endpoint_id)}</B><BR/>{escape(endpoint_type)}<BR/>{escape(services)}>>",
+                    f"<<B>{escape_label(endpoint_id)}</B><BR/>{escape_label(endpoint_type)}<BR/>{escape_label(services)}>>",
                     shape="box",
                     style="rounded,filled",
                     fillcolor="#e8e8ff",
@@ -479,13 +479,13 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                 instance_class = db_instance.get("DBInstanceClass") or ""
                 label_lines = []
                 if identifier:
-                    label_lines.append(f"<B>{escape(identifier)}</B>")
+                    label_lines.append(f"<B>{escape_label(identifier)}</B>")
                 if engine:
-                    label_lines.append(escape(engine))
+                    label_lines.append(escape_label(engine))
                 if instance_class:
-                    label_lines.append(escape(instance_class))
+                    label_lines.append(escape_label(instance_class))
                 if status:
-                    label_lines.append(f"Status: {escape(status)}")
+                    label_lines.append(f"Status: {escape_label(status)}")
 
                 label_html = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
                 label_html += '<TR><TD BGCOLOR="#fdebd0"><FONT COLOR="#7b341e">'
@@ -530,7 +530,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             for tier_key, tier_label in TIER_ORDER:
                 with vpc_graph.subgraph(name=f"cluster_{vpc_id}_{tier_key}") as tier_graph:
                     tier_graph.attr(rank="same")
-                    tier_graph.attr(label=f"<<B>{escape(tier_label)}</B>>")
+                    tier_graph.attr(label=f"<<B>{escape_label(tier_label)}</B>>")
                     tier_graph.attr(color="gray")
                     tier_graph.attr(style="dashed")
                     for az in azs:

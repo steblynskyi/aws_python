@@ -1,7 +1,7 @@
 """VPC-related helpers for network diagram generation."""
 from __future__ import annotations
 
-from html import escape
+from .html_utils import escape_label
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
@@ -253,15 +253,15 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
 
     subnet_lines = []
     if cell.name:
-        subnet_lines.append(f"<B>{escape(cell.name)}</B>")
-    subnet_lines.append(f'<FONT POINT-SIZE="10">{escape(cell.subnet_id)}</FONT>')
+        subnet_lines.append(f"<B>{escape_label(cell.name)}</B>")
+    subnet_lines.append(f'<FONT POINT-SIZE="10">{escape_label(cell.subnet_id)}</FONT>')
     if cell.cidr:
-        subnet_lines.append(escape(cell.cidr))
+        subnet_lines.append(escape_label(cell.cidr))
     if cell.az:
-        subnet_lines.append(escape(cell.az))
+        subnet_lines.append(escape_label(cell.az))
     if cell.route_summary:
         subnet_lines.append(
-            f'<FONT POINT-SIZE="9" COLOR="#2d3748"><B>rt:</B> {escape(cell.route_summary.route_table_id)}</FONT>'
+            f'<FONT POINT-SIZE="9" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
         )
 
     subnet_html = "<BR/>".join(subnet_lines)
@@ -270,11 +270,11 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     if cell.route_summary:
         route_lines = []
         if cell.route_summary.name:
-            route_lines.append(f"<B>{escape(cell.route_summary.name)}</B>")
-        route_lines.append(escape(cell.route_summary.route_table_id))
+            route_lines.append(f"<B>{escape_label(cell.route_summary.name)}</B>")
+        route_lines.append(escape_label(cell.route_summary.route_table_id))
         if cell.route_summary.routes:
             for route in cell.route_summary.routes:
-                route_lines.append(escape(route.display_text()))
+                route_lines.append(escape_label(route.display_text()))
         else:
             route_lines.append("No non-local routes")
         route_html = '<BR ALIGN="LEFT"/>'.join(route_lines)
@@ -283,7 +283,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     if cell.instances:
         instance_lines = ["<B>Instances</B>"]
         for instance in cell.instances:
-            instance_lines.append(escape(instance.display_text()))
+            instance_lines.append(escape_label(instance.display_text()))
         instance_html = '<BR ALIGN="LEFT"/>'.join(instance_lines)
         instance_row = (
             '<TR><TD BGCOLOR="#eef2ff"><FONT COLOR="#1a365d">'
