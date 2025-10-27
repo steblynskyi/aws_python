@@ -7,6 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
+from ..utils import finding_from_exception
 
 
 def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
@@ -19,14 +20,7 @@ def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
         paginator = kms.get_paginator("list_keys")
         keys = [key for page in paginator.paginate() for key in page.get("Keys", [])]
     except (ClientError, EndpointConnectionError) as exc:
-        return [
-            Finding(
-                service="KMS",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to list KMS keys: {exc}",
-            )
-        ]
+        return [finding_from_exception("KMS", "Failed to list KMS keys", exc)]
 
     alias_map = _build_alias_map(kms)
 
@@ -41,14 +35,25 @@ def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
         except (ClientError, EndpointConnectionError) as exc:
             code = _error_code(exc)
             severity = "WARNING" if code == "AccessDeniedException" else "ERROR"
-            message = (
-                "Access denied while describing KMS key."
-                if severity == "WARNING"
-                else f"Failed to describe KMS key: {exc}"
-            )
-            findings.append(
-                Finding(service="KMS", resource_id=resource_id, severity=severity, message=message)
-            )
+            if severity == "WARNING":
+                message = "Access denied while describing KMS key."
+                findings.append(
+                    Finding(
+                        service="KMS",
+                        resource_id=resource_id,
+                        severity=severity,
+                        message=message,
+                    )
+                )
+            else:
+                findings.append(
+                    finding_from_exception(
+                        "KMS",
+                        "Failed to describe KMS key",
+                        exc,
+                        resource_id=resource_id,
+                    )
+                )
             continue
 
         key_state = metadata.get("KeyState")
@@ -120,11 +125,8 @@ def _check_rotation(kms: boto3.client, key_id: str, resource_id: str) -> Iterabl
             # Some key types do not support rotation; skip without raising noise.
             return
         else:
-            yield Finding(
-                service="KMS",
-                resource_id=resource_id,
-                severity="ERROR",
-                message=f"Failed to check rotation status: {exc}",
+            yield finding_from_exception(
+                "KMS", "Failed to check rotation status", exc, resource_id=resource_id
             )
         return
 

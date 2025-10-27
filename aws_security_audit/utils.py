@@ -6,6 +6,8 @@ from typing import Iterable, Iterator, Sequence, TypeVar
 import boto3
 from botocore.exceptions import OperationNotPageableError
 
+from .findings import Finding
+
 T = TypeVar("T")
 
 
@@ -32,4 +34,23 @@ def batch_iterable(items: Sequence[T], size: int) -> Iterable[Sequence[T]]:
         yield items[i : i + size]
 
 
-__all__ = ["safe_paginate", "batch_iterable"]
+def finding_from_exception(
+    service: str,
+    action: str,
+    exc: Exception,
+    *,
+    resource_id: str = "*",
+    severity: str = "ERROR",
+) -> Finding:
+    """Create a :class:`Finding` describing an exception raised by ``action``.
+
+    The helper ensures consistent formatting for error findings while leaving the
+    caller in control of the severity and resource identifier.
+    """
+
+    action = action.rstrip(".")
+    message = f"{action}: {exc}"
+    return Finding(service=service, resource_id=resource_id, severity=severity, message=message)
+
+
+__all__ = ["safe_paginate", "batch_iterable", "finding_from_exception"]

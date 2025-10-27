@@ -8,7 +8,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_iam_users(session: boto3.session.Session) -> List[Finding]:
@@ -43,12 +43,7 @@ def audit_iam_users(session: boto3.session.Session) -> List[Finding]:
                     )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="IAM",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to audit IAM users: {exc}",
-            )
+            finding_from_exception("IAM", "Failed to audit IAM users", exc)
         )
     return findings
 

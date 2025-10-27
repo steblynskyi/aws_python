@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_route53_zones(session: boto3.session.Session) -> List[Finding]:
@@ -42,12 +42,7 @@ def audit_route53_zones(session: boto3.session.Session) -> List[Finding]:
                     )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="Route53",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to describe hosted zones: {exc}",
-            )
+            finding_from_exception("Route53", "Failed to describe hosted zones", exc)
         )
     return findings
 

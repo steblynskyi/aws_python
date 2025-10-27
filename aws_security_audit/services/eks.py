@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding
-from ..utils import safe_paginate
+from ..utils import finding_from_exception, safe_paginate
 
 
 def audit_eks_clusters(session: boto3.session.Session) -> List[Finding]:
@@ -22,11 +22,11 @@ def audit_eks_clusters(session: boto3.session.Session) -> List[Finding]:
                 cluster = eks.describe_cluster(name=name)["cluster"]
             except ClientError as exc:
                 findings.append(
-                    Finding(
-                        service="EKS",
+                    finding_from_exception(
+                        "EKS",
+                        "Failed to describe cluster",
+                        exc,
                         resource_id=name,
-                        severity="ERROR",
-                        message=f"Failed to describe cluster: {exc}",
                     )
                 )
                 continue
@@ -62,12 +62,7 @@ def audit_eks_clusters(session: boto3.session.Session) -> List[Finding]:
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
-            Finding(
-                service="EKS",
-                resource_id="*",
-                severity="ERROR",
-                message=f"Failed to list clusters: {exc}",
-            )
+            finding_from_exception("EKS", "Failed to list clusters", exc)
         )
     return findings
 
