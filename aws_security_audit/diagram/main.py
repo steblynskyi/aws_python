@@ -54,7 +54,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     ec2 = session.client("ec2")
     rds = session.client("rds")
     graph = Digraph("aws_network", format="png")
-    graph.attr(rankdir="TB", bgcolor="white", fontname="Helvetica")
+    graph.attr(rankdir="TB")
+    graph.attr(bgcolor="white")
+    graph.attr(fontname="Helvetica")
     graph.node_attr.update(fontname="Helvetica", fontsize="11")
     graph.edge_attr.update(fontname="Helvetica", fontsize="10")
 
@@ -167,13 +169,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
         vpc_label += ">>"
 
         with graph.subgraph(name=f"cluster_{vpc_id}") as vpc_graph:
-            vpc_graph.attr(
-                label=vpc_label,
-                style="rounded",
-                color="#4a5568",
-                fontsize="13",
-                fontname="Helvetica",
-            )
+            vpc_graph.attr(label=vpc_label)
+            vpc_graph.attr(style="rounded")
+            vpc_graph.attr(color="#4a5568")
+            vpc_graph.attr(fontsize="13")
+            vpc_graph.attr(fontname="Helvetica")
 
             subnets_in_vpc = [subnet for subnet in subnets if subnet["VpcId"] == vpc_id]
             azs = sorted({subnet.get("AvailabilityZone", "") for subnet in subnets_in_vpc if subnet.get("AvailabilityZone")})
@@ -519,7 +519,9 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
             for tier_key, tier_label in TIER_ORDER:
                 with vpc_graph.subgraph(name=f"cluster_{vpc_id}_{tier_key}") as tier_graph:
                     tier_graph.attr(rank="same")
-                    tier_graph.attr(label=f"<<B>{escape(tier_label)}</B>>", color="gray", style="dashed")
+                    tier_graph.attr(label=f"<<B>{escape(tier_label)}</B>>")
+                    tier_graph.attr(color="gray")
+                    tier_graph.attr(style="dashed")
                     for az in azs:
                         if not tier_nodes[tier_key].get(az):
                             placeholder = tier_placeholder(tier_key, az)
@@ -550,13 +552,11 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
                     )
 
             with vpc_graph.subgraph(name=f"legend_{vpc_id}") as legend:
-                legend.attr(
-                    label="<<B>Legend</B>>",
-                    color="#b7b7b7",
-                    style="rounded",
-                    bgcolor="#f7f7f7",
-                    fontsize="11",
-                )
+                legend.attr(label="<<B>Legend</B>>")
+                legend.attr(color="#b7b7b7")
+                legend.attr(style="rounded")
+                legend.attr(bgcolor="#f7f7f7")
+                legend.attr(fontsize="11")
                 legend_entries = [
                     ("public", "#ccebd4", "Public subnet"),
                     ("private", "#cfe3ff", "Private subnet"),
@@ -601,14 +601,12 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
     if has_global_services:
         with graph.subgraph(name="cluster_global_services") as global_graph:
-            global_graph.attr(
-                label="<<B>Global / Regional Services</B>>",
-                style="rounded",
-                color="#4a5568",
-                bgcolor="#f7fafc",
-                fontsize="12",
-                fontname="Helvetica",
-            )
+            global_graph.attr(label="<<B>Global / Regional Services</B>>")
+            global_graph.attr(style="rounded")
+            global_graph.attr(color="#4a5568")
+            global_graph.attr(bgcolor="#f7fafc")
+            global_graph.attr(fontsize="12")
+            global_graph.attr(fontname="Helvetica")
             previous_node: Optional[str] = None
             for index, summary in enumerate(global_services):
                 node_id = f"global_service_{index}"
