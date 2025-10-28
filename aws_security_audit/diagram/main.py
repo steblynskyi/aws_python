@@ -4,7 +4,7 @@ from __future__ import annotations
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional
 
-from .html_utils import escape_label, format_vertical_label
+from .html_utils import build_icon_label, escape_label
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
@@ -216,19 +216,22 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
 
 def _build_vpc_label(vpc: dict) -> str:
     vpc_id = vpc["VpcId"]
-    vpc_title = f"VPC {vpc_id}"
-    rows = [f'<TR><TD ALIGN="LEFT"><B>{escape_label(vpc_title)}</B></TD></TR>']
+    details = []
     cidr_block = vpc.get("CidrBlock")
     if cidr_block:
-        rows.append(f'<TR><TD ALIGN="LEFT">{escape_label(cidr_block)}</TD></TR>')
+        details.append(f"CIDR: {cidr_block}")
     dhcp_options_id = vpc.get("DhcpOptionsId")
     if dhcp_options_id and dhcp_options_id != "default":
-        rows.append(
-            '<TR><TD ALIGN="LEFT">DHCP Options: '
-            f'{escape_label(dhcp_options_id)}</TD></TR>'
-        )
-    return (
-        '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">' + "".join(rows) + "</TABLE>>"
+        details.append(f"DHCP Options: {dhcp_options_id}")
+
+    return build_icon_label(
+        f"VPC {vpc_id}",
+        details,
+        icon_text="VPC",
+        icon_bgcolor="#22543d",
+        body_bgcolor="#e6fffa",
+        body_color="#1d4044",
+        border_color="#22543d",
     )
 
 
@@ -272,15 +275,21 @@ def _render_vpc_cluster(
         vpc_graph.attr(color="#4a5568")
         vpc_graph.attr(fontsize="13")
         vpc_graph.attr(fontname="Helvetica")
+        vpc_graph.attr(bgcolor="#f8fafc")
 
+        internet_label = build_icon_label(
+            "Internet",
+            [f"VPC {vpc_id}"],
+            icon_text="WWW",
+            icon_bgcolor="#1a202c",
+            body_bgcolor="#edf2f7",
+            body_color="#1a202c",
+            border_color="#1a202c",
+        )
         vpc_graph.node(
             f"{vpc_id}_internet",
-            "<<B>Internet</B>>",
-            shape="box",
-            style="rounded,filled,dashed",
-            color="#4a5568",
-            fillcolor="white",
-            fontsize="12",
+            internet_label,
+            shape="plaintext",
             group="internet",
         )
 
@@ -338,19 +347,22 @@ def _render_vpc_cluster(
                 ),
                 None,
             )
-            nat_lines = [f"<B>{nat_id}</B>"]
+            nat_details = []
             if az:
-                nat_lines.append(escape_label(az))
+                nat_details.append(f"AZ: {az}")
             if eip:
-                nat_lines.append(f"EIP: {escape_label(eip)}")
+                nat_details.append(f"Elastic IP: {eip}")
             if subnet_id:
-                nat_lines.append(f"Subnet: {escape_label(subnet_id)}")
-            nat_label = (
-                '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-                '<TR><TD BGCOLOR="#fff2cc"><FONT COLOR="#8a6d3b">'
+                nat_details.append(f"Subnet: {subnet_id}")
+            nat_label = build_icon_label(
+                nat_id,
+                nat_details,
+                icon_text="NAT",
+                icon_bgcolor="#b7791f",
+                body_bgcolor="#fff7e6",
+                body_color="#5c3d0c",
+                border_color="#b7791f",
             )
-            nat_label += "<BR/>".join(nat_lines)
-            nat_label += "</FONT></TD></TR></TABLE>>"
             node_name = f"{nat_id}_node"
             az_key = az or center_az
             if az_key not in tier_nodes["ingress"]:
@@ -359,7 +371,6 @@ def _render_vpc_cluster(
                 node_name,
                 nat_label,
                 shape="plaintext",
-                style="dashed",
                 group=az_key or nat_id,
             )
             tier_nodes["ingress"].setdefault(az_key, []).append(node_name)
@@ -371,17 +382,19 @@ def _render_vpc_cluster(
         igw_node_lookup: Dict[str, str] = {}
         for igw_id in igw_in_vpc:
             node_name = f"{igw_id}_node"
+            igw_label = build_icon_label(
+                igw_id,
+                ["Internet Gateway"],
+                icon_text="IGW",
+                icon_bgcolor="#2d3748",
+                body_bgcolor="#f7fafc",
+                body_color="#2d3748",
+                border_color="#2d3748",
+            )
             vpc_graph.node(
                 node_name,
-                (
-                    f'<<B>{escape_label(igw_id)}</B>'
-                    '<BR/><FONT POINT-SIZE="10">Internet Gateway</FONT>>'
-                ),
-                shape="box",
-                style="rounded,filled,dashed",
-                color="#4a5568",
-                fillcolor="white",
-                fontsize="11",
+                igw_label,
+                shape="plaintext",
                 group=center_az or "internet",
             )
             vpc_graph.edge(f"{vpc_id}_internet", node_name, color="#4a5568", style="dashed")
@@ -414,75 +427,72 @@ def _render_vpc_cluster(
                         return external_nodes.get(node_id)
 
                     label_map = {
-                        "egress_only_internet_gateway": (
-                            format_vertical_label(
-                                [node_id, "Egress-Only IGW"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,filled,dashed",
-                            "#4a5568",
-                            "white",
+                        "egress_only_internet_gateway": build_icon_label(
+                            node_id,
+                            ["Egress-only IGW"],
+                            icon_text="EIGW",
+                            icon_bgcolor="#2d3748",
+                            body_bgcolor="#f7fafc",
+                            body_color="#2d3748",
+                            border_color="#2d3748",
                         ),
-                        "transit_gateway": (
-                            format_vertical_label(
-                                [node_id, "Transit Gateway"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,filled,dashed",
-                            "#2c5282",
-                            "#ebf8ff",
+                        "transit_gateway": build_icon_label(
+                            node_id,
+                            ["Transit Gateway"],
+                            icon_text="TGW",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#ebf8ff",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
                         ),
-                        "vpc_peering_connection": (
-                            format_vertical_label(
-                                [node_id, "VPC Peering"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,dashed",
-                            "#2c5282",
-                            "white",
+                        "vpc_peering_connection": build_icon_label(
+                            node_id,
+                            ["VPC Peering"],
+                            icon_text="PCX",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#f7fafc",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
                         ),
-                        "virtual_private_gateway": (
-                            format_vertical_label(
-                                [node_id, "Virtual Private Gateway"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,filled,dashed",
-                            "#2c5282",
-                            "#edf2f7",
+                        "virtual_private_gateway": build_icon_label(
+                            node_id,
+                            ["Virtual Private Gateway"],
+                            icon_text="VGW",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#edf2f7",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
                         ),
-                        "carrier_gateway": (
-                            format_vertical_label(
-                                [node_id, "Carrier Gateway"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,dashed",
-                            "#2c5282",
-                            "white",
+                        "carrier_gateway": build_icon_label(
+                            node_id,
+                            ["Carrier Gateway"],
+                            icon_text="CGW",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#f7fafc",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
                         ),
-                        "local_gateway": (
-                            format_vertical_label(
-                                [node_id, "Local Gateway"], bold_first=True
-                            ),
-                            "box",
-                            "rounded,dashed",
-                            "#2c5282",
-                            "white",
+                        "local_gateway": build_icon_label(
+                            node_id,
+                            ["Local Gateway"],
+                            icon_text="LGW",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#f7fafc",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
                         ),
                     }
 
-                    if node_type not in label_map:
+                    label = label_map.get(node_type)
+
+                    if not label:
                         return None
 
-                    label, shape, style, color, fillcolor = label_map[node_type]
                     external_node_name = f"{node_id}_node"
                     vpc_graph.node(
                         external_node_name,
                         label,
-                        shape=shape,
-                        style=style,
-                        color=color,
-                        fillcolor=fillcolor,
-                        fontsize="10",
+                        shape="plaintext",
                     )
                     external_nodes[node_id] = external_node_name
                     return external_node_name
@@ -532,14 +542,24 @@ def _render_vpc_cluster(
                 subnet_ids = endpoint.get("SubnetIds", [])
                 if subnet_ids:
                     endpoint_az = subnet_az_map.get(subnet_ids[0], center_az)
+            endpoint_lines = []
+            if endpoint_type:
+                endpoint_lines.append(endpoint_type.title())
+            if services:
+                endpoint_lines.append(services)
+            endpoint_label = build_icon_label(
+                endpoint_id or "VPC Endpoint",
+                endpoint_lines,
+                icon_text="VPCE",
+                icon_bgcolor="#4c51bf",
+                body_bgcolor="#e8e8ff",
+                body_color="#2c5282",
+                border_color="#4c51bf",
+            )
             vpc_graph.node(
                 node_name,
-                f"<<B>{escape_label(endpoint_id)}</B><BR/>{escape_label(endpoint_type)}<BR/>{escape_label(services)}>>",
-                shape="box",
-                style="rounded,filled",
-                fillcolor="#e8e8ff",
-                color="#4c51bf",
-                fontsize="10",
+                endpoint_label,
+                shape="plaintext",
             )
             tier_nodes["shared"].setdefault(endpoint_az, []).append(node_name)
             external_nodes[endpoint_id] = node_name
@@ -558,20 +578,24 @@ def _render_vpc_cluster(
             engine = db_instance.get("Engine") or ""
             status = db_instance.get("DBInstanceStatus") or ""
             instance_class = db_instance.get("DBInstanceClass") or ""
-            label_lines = []
-            if identifier:
-                label_lines.append(f"<B>{escape_label(identifier)}</B>")
+            rds_title = identifier or "RDS Instance"
+            rds_details = []
             if engine:
-                label_lines.append(escape_label(engine))
+                rds_details.append(f"Engine: {engine}")
             if instance_class:
-                label_lines.append(escape_label(instance_class))
+                rds_details.append(f"Class: {instance_class}")
             if status:
-                label_lines.append(f"Status: {escape_label(status)}")
+                rds_details.append(f"Status: {status}")
 
-            label_html = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-            label_html += '<TR><TD BGCOLOR="#fdebd0"><FONT COLOR="#7b341e">'
-            label_html += "<BR/>".join(label_lines) if label_lines else "RDS Instance"
-            label_html += "</FONT></TD></TR></TABLE>>"
+            label_html = build_icon_label(
+                rds_title,
+                rds_details,
+                icon_text="RDS",
+                icon_bgcolor="#9b2c2c",
+                body_bgcolor="#fdebd0",
+                body_color="#7b341e",
+                border_color="#c05621",
+            )
 
             node_name = f"rds_{identifier or 'instance'}".replace("-", "_")
 
@@ -649,42 +673,132 @@ def _render_vpc_cluster(
             legend.attr(bgcolor="#f7f7f7")
             legend.attr(fontsize="11")
             legend_entries = [
-                ("public", "#ccebd4", "Public subnet"),
-                ("private", "#cfe3ff", "Private subnet"),
-                ("isolated", "#e2e2e2", "Isolated subnet"),
-                ("nat", "#fff2cc", "NAT Gateway"),
-                ("vpce", "#e8e8ff", "VPC Endpoint"),
-                ("instances", "#eef2ff", "Instances"),
-                ("rds", "#fdebd0", "RDS Instance"),
+                (
+                    "public",
+                    build_icon_label(
+                        "Public Subnet",
+                        ["CIDR: 10.0.0.0/24"],
+                        icon_text="PUB",
+                        icon_bgcolor="#047857",
+                        body_bgcolor="#ccebd4",
+                        body_color="#1f3f2e",
+                        border_color="#047857",
+                    ),
+                ),
+                (
+                    "private",
+                    build_icon_label(
+                        "Private App Subnet",
+                        ["CIDR: 10.0.1.0/24"],
+                        icon_text="APP",
+                        icon_bgcolor="#1d4ed8",
+                        body_bgcolor="#cfe3ff",
+                        body_color="#1a365d",
+                        border_color="#1d4ed8",
+                    ),
+                ),
+                (
+                    "isolated",
+                    build_icon_label(
+                        "Isolated Subnet",
+                        ["CIDR: 10.0.2.0/24"],
+                        icon_text="ISO",
+                        icon_bgcolor="#4a5568",
+                        body_bgcolor="#e2e2e2",
+                        body_color="#2d3748",
+                        border_color="#4a5568",
+                    ),
+                ),
+                (
+                    "nat",
+                    build_icon_label(
+                        "NAT Gateway",
+                        ["Elastic IP association"],
+                        icon_text="NAT",
+                        icon_bgcolor="#b7791f",
+                        body_bgcolor="#fff7e6",
+                        body_color="#5c3d0c",
+                        border_color="#b7791f",
+                    ),
+                ),
+                (
+                    "vpce",
+                    build_icon_label(
+                        "VPC Endpoint",
+                        ["Interface example"],
+                        icon_text="VPCE",
+                        icon_bgcolor="#4c51bf",
+                        body_bgcolor="#e8e8ff",
+                        body_color="#2c5282",
+                        border_color="#4c51bf",
+                    ),
+                ),
+                (
+                    "instances",
+                    build_icon_label(
+                        "EC2 Instance",
+                        ["Private IP: 10.0.0.12"],
+                        icon_text="EC2",
+                        icon_bgcolor="#3730a3",
+                        body_bgcolor="#eef2ff",
+                        body_color="#1e1b4b",
+                        border_color="#3730a3",
+                    ),
+                ),
+                (
+                    "rds",
+                    build_icon_label(
+                        "RDS Instance",
+                        ["Engine: postgres"],
+                        icon_text="RDS",
+                        icon_bgcolor="#9b2c2c",
+                        body_bgcolor="#fdebd0",
+                        body_color="#7b341e",
+                        border_color="#c05621",
+                    ),
+                ),
+                (
+                    "igw",
+                    build_icon_label(
+                        "Internet Gateway",
+                        ["Internet access"],
+                        icon_text="IGW",
+                        icon_bgcolor="#2d3748",
+                        body_bgcolor="#f7fafc",
+                        body_color="#2d3748",
+                        border_color="#2d3748",
+                    ),
+                ),
             ]
             if has_global_services:
-                legend_entries.append(("global_service", "#f7fafc", "Global service summary"))
+                legend_entries.append(
+                    (
+                        "global_service",
+                        build_icon_label(
+                            "Global Service Panel",
+                            ["Aggregated account view"],
+                            icon_text="GLB",
+                            icon_bgcolor="#2c5282",
+                            body_bgcolor="#f7fafc",
+                            body_color="#1a365d",
+                            border_color="#2c5282",
+                        ),
+                    )
+                )
 
-            for key, color, text in legend_entries:
+            for key, label in legend_entries:
                 legend.node(
                     f"legend_{key}_{vpc_id}",
-                    (
-                        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-                        f'<TR><TD BGCOLOR="{color}">{text}</TD></TR></TABLE>>'
-                    ),
+                    label,
                     shape="plaintext",
                 )
-            legend.node(
-                f"legend_igw_{vpc_id}",
-                "<<B>Internet Gateway / Internet</B>>",
-                shape="plaintext",
-            )
-            legend.edge(f"legend_public_{vpc_id}", f"legend_private_{vpc_id}", style="invis")
-            legend.edge(f"legend_private_{vpc_id}", f"legend_isolated_{vpc_id}", style="invis")
-            legend.edge(f"legend_isolated_{vpc_id}", f"legend_nat_{vpc_id}", style="invis")
-            legend.edge(f"legend_nat_{vpc_id}", f"legend_vpce_{vpc_id}", style="invis")
-            legend.edge(f"legend_vpce_{vpc_id}", f"legend_instances_{vpc_id}", style="invis")
-            legend.edge(f"legend_instances_{vpc_id}", f"legend_rds_{vpc_id}", style="invis")
-            legend.edge(f"legend_rds_{vpc_id}", f"legend_igw_{vpc_id}", style="invis")
-            if has_global_services:
+
+            for index in range(len(legend_entries) - 1):
+                current_key = legend_entries[index][0]
+                next_key = legend_entries[index + 1][0]
                 legend.edge(
-                    f"legend_igw_{vpc_id}",
-                    f"legend_global_service_{vpc_id}",
+                    f"legend_{current_key}_{vpc_id}",
+                    f"legend_{next_key}_{vpc_id}",
                     style="invis",
                 )
 
