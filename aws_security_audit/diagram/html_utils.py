@@ -78,9 +78,20 @@ def build_icon_label(
         '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">' + "".join(body_rows) + "</TABLE>"
     )
 
+    icon_cell_attributes = [
+        f'BGCOLOR="{icon_bgcolor}"',
+        'ALIGN="CENTER"',
+        'VALIGN="MIDDLE"',
+        'WIDTH="32"',
+        'HEIGHT="32"',
+    ]
+    # Allow Graphviz to expand the icon cell when the text would otherwise
+    # overflow the fixed 32px square.  This avoids ``cell size too small``
+    # warnings while keeping the minimum size consistent for short labels.
+    icon_cell_attribute_str = " ".join(icon_cell_attributes)
     icon_cell = (
-        f'<TD BGCOLOR="{icon_bgcolor}" ALIGN="CENTER" VALIGN="MIDDLE" WIDTH="32" '
-        f'HEIGHT="32" FIXEDSIZE="TRUE"><FONT COLOR="{icon_color}"><B>{escape_label(icon_text)}</B></FONT></TD>'
+        f'<TD {icon_cell_attribute_str}><FONT COLOR="{icon_color}"><B>'
+        f"{escape_label(icon_text)}</B></FONT></TD>"
     )
 
     label = (
