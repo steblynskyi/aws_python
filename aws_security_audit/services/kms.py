@@ -1,26 +1,39 @@
 """Audit helpers for AWS Key Management Service (KMS) keys."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List
+from typing import Dict, List
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from ..findings import Finding
+from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception
+from . import ServiceReport
 
 
-def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
+def audit_kms_keys(session: boto3.session.Session) -> ServiceReport:
     """Inspect customer-managed KMS keys for common misconfigurations."""
 
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     kms = session.client("kms")
 
     try:
         paginator = kms.get_paginator("list_keys")
         keys = [key for page in paginator.paginate() for key in page.get("Keys", [])]
     except (ClientError, EndpointConnectionError) as exc:
-        return [finding_from_exception("KMS", "Failed to list KMS keys", exc)]
+        finding = finding_from_exception("KMS", "Failed to list KMS keys", exc)
+        return ServiceReport(
+            findings=[finding],
+            inventory=[
+                InventoryItem(
+                    service="KMS",
+                    resource_id="*",
+                    status="ERROR",
+                    details=f"Failed to list KMS keys: {exc}",
+                )
+            ],
+        )
 
     alias_map = _build_alias_map(kms)
 
@@ -37,28 +50,43 @@ def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
             severity = "WARNING" if code == "AccessDeniedException" else "ERROR"
             if severity == "WARNING":
                 message = "Access denied while describing KMS key."
-                findings.append(
-                    Finding(
+                finding = Finding(
+                    service="KMS",
+                    resource_id=resource_id,
+                    severity=severity,
+                    message=message,
+                )
+                findings.append(finding)
+                inventory.append(
+                    InventoryItem(
                         service="KMS",
                         resource_id=resource_id,
-                        severity=severity,
-                        message=message,
+                        status="ERROR",
+                        details=message,
                     )
                 )
             else:
-                findings.append(
-                    finding_from_exception(
-                        "KMS",
-                        "Failed to describe KMS key",
-                        exc,
+                finding = finding_from_exception(
+                    "KMS",
+                    "Failed to describe KMS key",
+                    exc,
+                    resource_id=resource_id,
+                )
+                findings.append(finding)
+                inventory.append(
+                    InventoryItem(
+                        service="KMS",
                         resource_id=resource_id,
+                        status="ERROR",
+                        details=f"Failed to describe KMS key: {exc}",
                     )
                 )
             continue
 
+        key_findings: List[Finding] = []
         key_state = metadata.get("KeyState")
         if key_state not in {"Enabled", None}:
-            findings.append(
+            key_findings.append(
                 Finding(
                     service="KMS",
                     resource_id=resource_id,
@@ -68,11 +96,25 @@ def audit_kms_keys(session: boto3.session.Session) -> List[Finding]:
             )
 
         if _supports_rotation_check(metadata):
-            findings.extend(
-                _check_rotation(kms, key_id, resource_id)
-            )
+            key_findings.extend(_check_rotation(kms, key_id, resource_id))
 
-    return findings
+        findings.extend(key_findings)
+        if key_findings:
+            details = "; ".join(f.message for f in key_findings)
+            status = "NON_COMPLIANT"
+        else:
+            details = "All checks passed."
+            status = "COMPLIANT"
+        inventory.append(
+            InventoryItem(
+                service="KMS",
+                resource_id=resource_id,
+                status=status,
+                details=details,
+            )
+        )
+
+    return ServiceReport(findings=findings, inventory=inventory)
 
 
 def _build_alias_map(kms: boto3.client) -> Dict[str, str]:
@@ -107,36 +149,46 @@ def _supports_rotation_check(metadata: Dict[str, object]) -> bool:
     return isinstance(key_spec, str) and key_spec.startswith("SYMMETRIC")
 
 
-def _check_rotation(kms: boto3.client, key_id: str, resource_id: str) -> Iterable[Finding]:
-    """Yield findings related to KMS key rotation."""
+def _check_rotation(kms: boto3.client, key_id: str, resource_id: str) -> List[Finding]:
+    """Return findings related to KMS key rotation."""
+
+    findings: List[Finding] = []
 
     try:
         status = kms.get_key_rotation_status(KeyId=key_id)
     except (ClientError, EndpointConnectionError) as exc:
         code = _error_code(exc)
         if code == "AccessDeniedException":
-            yield Finding(
-                service="KMS",
-                resource_id=resource_id,
-                severity="WARNING",
-                message="Access denied while checking rotation status.",
+            findings.append(
+                Finding(
+                    service="KMS",
+                    resource_id=resource_id,
+                    severity="WARNING",
+                    message="Access denied while checking rotation status.",
+                )
             )
         elif code == "UnsupportedOperationException":
             # Some key types do not support rotation; skip without raising noise.
-            return
+            return findings
         else:
-            yield finding_from_exception(
-                "KMS", "Failed to check rotation status", exc, resource_id=resource_id
+            findings.append(
+                finding_from_exception(
+                    "KMS", "Failed to check rotation status", exc, resource_id=resource_id
+                )
             )
-        return
+        return findings
 
     if not status.get("KeyRotationEnabled", False):
-        yield Finding(
-            service="KMS",
-            resource_id=resource_id,
-            severity="MEDIUM",
-            message="Automatic key rotation is disabled.",
+        findings.append(
+            Finding(
+                service="KMS",
+                resource_id=resource_id,
+                severity="MEDIUM",
+                message="Automatic key rotation is disabled.",
+            )
         )
+
+    return findings
 
 
 def _error_code(exc: Exception) -> str:

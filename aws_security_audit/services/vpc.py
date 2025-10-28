@@ -1,48 +1,86 @@
 """Audit helpers for Amazon VPC resources."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from ..findings import Finding
+from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
+from . import ServiceReport
 
 
-def audit_vpcs(session: boto3.session.Session) -> List[Finding]:
+def audit_vpcs(session: boto3.session.Session) -> ServiceReport:
     """Inspect VPC networking constructs for common security gaps."""
 
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     ec2 = session.client("ec2")
 
-    findings.extend(_audit_security_groups(ec2))
-    findings.extend(_audit_network_acls(ec2))
-    findings.extend(_audit_vpc_peering(ec2))
-    findings.extend(_audit_vpn_connections(ec2))
+    sg_findings, sg_inventory = _audit_security_groups(ec2)
+    findings.extend(sg_findings)
+    inventory.extend(sg_inventory)
 
-    return findings
+    acl_findings, acl_inventory = _audit_network_acls(ec2)
+    findings.extend(acl_findings)
+    inventory.extend(acl_inventory)
+
+    peering_findings, peering_inventory = _audit_vpc_peering(ec2)
+    findings.extend(peering_findings)
+    inventory.extend(peering_inventory)
+
+    vpn_findings, vpn_inventory = _audit_vpn_connections(ec2)
+    findings.extend(vpn_findings)
+    inventory.extend(vpn_inventory)
+
+    return ServiceReport(findings=findings, inventory=inventory)
 
 
-def _audit_security_groups(ec2: BaseClient) -> List[Finding]:
+def _audit_security_groups(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryItem]]:
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     try:
         for sg in safe_paginate(ec2, "describe_security_groups", "SecurityGroups"):
             group_id = sg["GroupId"]
+            group_findings: List[Finding] = []
             for permission in sg.get("IpPermissions", []):
-                findings.extend(
+                group_findings.extend(
                     _build_open_security_group_findings(group_id, permission, inbound=True)
                 )
             for permission in sg.get("IpPermissionsEgress", []):
-                findings.extend(
+                group_findings.extend(
                     _build_open_security_group_findings(group_id, permission, inbound=False)
                 )
+            findings.extend(group_findings)
+            if group_findings:
+                details = "; ".join(f.message for f in group_findings)
+                status = "NON_COMPLIANT"
+            else:
+                details = "All checks passed."
+                status = "COMPLIANT"
+            inventory.append(
+                InventoryItem(
+                    service="VPC",
+                    resource_id=group_id,
+                    status=status,
+                    details=details,
+                )
+            )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception("VPC", "Failed to describe security groups", exc)
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="VPC",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to describe security groups: {exc}",
+            )
+        )
+    return findings, inventory
 
 
 def _build_open_security_group_findings(
@@ -85,11 +123,13 @@ def _build_open_security_group_findings(
     return findings
 
 
-def _audit_network_acls(ec2: BaseClient) -> List[Finding]:
+def _audit_network_acls(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryItem]]:
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     try:
         for acl in safe_paginate(ec2, "describe_network_acls", "NetworkAcls"):
             acl_id = acl["NetworkAclId"]
+            acl_findings: List[Finding] = []
             for entry in acl.get("Entries", []):
                 cidr = entry.get("CidrBlock") or entry.get("Ipv6CidrBlock")
                 if cidr not in {"0.0.0.0/0", "::/0"}:
@@ -98,7 +138,7 @@ def _audit_network_acls(ec2: BaseClient) -> List[Finding]:
                     continue
                 direction = "egress" if entry.get("Egress") else "ingress"
                 port_range = _format_port_range(entry.get("PortRange"))
-                findings.append(
+                acl_findings.append(
                     Finding(
                         service="VPC",
                         resource_id=acl_id,
@@ -108,15 +148,39 @@ def _audit_network_acls(ec2: BaseClient) -> List[Finding]:
                         ),
                     )
                 )
+            findings.extend(acl_findings)
+            if acl_findings:
+                details = "; ".join(f.message for f in acl_findings)
+                status = "NON_COMPLIANT"
+            else:
+                details = "All checks passed."
+                status = "COMPLIANT"
+            inventory.append(
+                InventoryItem(
+                    service="VPC",
+                    resource_id=acl_id,
+                    status=status,
+                    details=details,
+                )
+            )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception("VPC", "Failed to describe network ACLs", exc)
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="VPC",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to describe network ACLs: {exc}",
+            )
+        )
+    return findings, inventory
 
 
-def _audit_vpc_peering(ec2: BaseClient) -> List[Finding]:
+def _audit_vpc_peering(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryItem]]:
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     try:
         for connection in safe_paginate(
             ec2, "describe_vpc_peering_connections", "VpcPeeringConnections"
@@ -132,23 +196,51 @@ def _audit_vpc_peering(ec2: BaseClient) -> List[Finding]:
                         message=f"VPC peering connection not active (status={status}).",
                     )
                 )
+                inventory.append(
+                    InventoryItem(
+                        service="VPC",
+                        resource_id=conn_id,
+                        status="NON_COMPLIANT",
+                        details=f"Connection status is {status}.",
+                    )
+                )
+            else:
+                conn_id = connection.get("VpcPeeringConnectionId", "unknown")
+                inventory.append(
+                    InventoryItem(
+                        service="VPC",
+                        resource_id=conn_id,
+                        status="COMPLIANT",
+                        details="Peering connection is active.",
+                    )
+                )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception(
                 "VPC", "Failed to describe VPC peering connections", exc
             )
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="VPC",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to describe VPC peering connections: {exc}",
+            )
+        )
+    return findings, inventory
 
 
-def _audit_vpn_connections(ec2: BaseClient) -> List[Finding]:
+def _audit_vpn_connections(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryItem]]:
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     try:
         for vpn in safe_paginate(ec2, "describe_vpn_connections", "VpnConnections"):
             vpn_id = vpn.get("VpnConnectionId", "unknown")
+            vpn_findings: List[Finding] = []
             state = vpn.get("State")
             if state and state != "available":
-                findings.append(
+                vpn_findings.append(
                     Finding(
                         service="VPC",
                         resource_id=vpn_id,
@@ -160,7 +252,7 @@ def _audit_vpn_connections(ec2: BaseClient) -> List[Finding]:
                 status = telemetry.get("Status")
                 outside_ip = telemetry.get("OutsideIpAddress")
                 if status and status != "UP":
-                    findings.append(
+                    vpn_findings.append(
                         Finding(
                             service="VPC",
                             resource_id=vpn_id,
@@ -171,11 +263,34 @@ def _audit_vpn_connections(ec2: BaseClient) -> List[Finding]:
                             ),
                         )
                     )
+            findings.extend(vpn_findings)
+            if vpn_findings:
+                details = "; ".join(f.message for f in vpn_findings)
+                status_label = "NON_COMPLIANT"
+            else:
+                details = "All checks passed."
+                status_label = "COMPLIANT"
+            inventory.append(
+                InventoryItem(
+                    service="VPC",
+                    resource_id=vpn_id,
+                    status=status_label,
+                    details=details,
+                )
+            )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception("VPC", "Failed to describe VPN connections", exc)
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="VPC",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to describe VPN connections: {exc}",
+            )
+        )
+    return findings, inventory
 
 
 def _format_port_range(port_range: Optional[dict]) -> str:

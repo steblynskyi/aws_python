@@ -9,7 +9,13 @@ from typing import List, Optional
 
 import boto3
 
-from .core import collect_findings, export_findings_to_excel, print_findings
+from .core import (
+    collect_audit_results,
+    collect_findings,
+    export_findings_to_excel,
+    export_inventory_to_excel,
+    print_findings,
+)
 from .diagram import generate_network_diagram
 from .services import SERVICE_CHECKS
 
@@ -33,6 +39,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Optional path to export findings as an Excel workbook (.xlsx)",
     )
     parser.add_argument(
+        "--inventory-excel",
+        dest="inventory_excel_path",
+        help="Optional path to export the full inventory as an Excel workbook (.xlsx)",
+    )
+    parser.add_argument(
         "--diagram",
         dest="diagram_path",
         help="Generate a Graphviz network diagram at the given path (requires graphviz)",
@@ -49,11 +60,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     selected_services = args.services if args.services else list(SERVICE_CHECKS)
 
     try:
-        findings = collect_findings(session, selected_services)
+        results = collect_audit_results(session, selected_services)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
+    findings = results.findings
     print_findings(findings)
 
     if args.json_path:
@@ -68,6 +80,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"Failed to export Excel report: {exc}", file=sys.stderr)
         else:
             print(f"Excel report written to {path}")
+
+    if args.inventory_excel_path:
+        try:
+            path = export_inventory_to_excel(results.inventory, args.inventory_excel_path)
+        except RuntimeError as exc:
+            print(f"Failed to export inventory Excel report: {exc}", file=sys.stderr)
+        else:
+            print(f"Inventory Excel report written to {path}")
 
     if args.diagram_path:
         try:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -19,4 +20,14 @@ class Finding:
         return f"{self.severity}:{self.service}:{self.resource_id}:{self.message}"
 
 
-__all__ = ["Finding"]
+@dataclass
+class InventoryItem:
+    """Represents the compliance state of an audited AWS resource."""
+
+    service: str
+    resource_id: str
+    status: Literal["COMPLIANT", "NON_COMPLIANT", "ERROR"]
+    details: str
+
+
+__all__ = ["Finding", "InventoryItem"]

@@ -1,12 +1,13 @@
 """Core orchestration utilities for the AWS security audit."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable, List
 
 import boto3
 
-from .findings import Finding
-from .services import SERVICE_CHECKS
+from .findings import Finding, InventoryItem
+from .services import SERVICE_CHECKS, ServiceReport
 
 
 SEVERITY_ORDER = {
@@ -27,10 +28,21 @@ def _finding_sort_key(finding: Finding) -> tuple[int, str, str, str]:
     return (severity_rank, finding.service, finding.resource_id, finding.message)
 
 
-def collect_findings(session: boto3.session.Session, services: Iterable[str]) -> List[Finding]:
-    """Run all requested service checks and return de-duplicated findings."""
+@dataclass
+class AuditResults:
+    """Aggregated findings and inventory from a full audit run."""
+
+    findings: List[Finding]
+    inventory: List[InventoryItem]
+
+
+def collect_audit_results(
+    session: boto3.session.Session, services: Iterable[str]
+) -> AuditResults:
+    """Run all requested service checks and return findings with inventory."""
 
     findings: dict[str, Finding] = {}
+    inventory: List[InventoryItem] = []
     normalized_services: List[str] = []
     for service in services:
         key = service.lower()
@@ -41,10 +53,19 @@ def collect_findings(session: boto3.session.Session, services: Iterable[str]) ->
 
     for service in dict.fromkeys(normalized_services):
         checker = SERVICE_CHECKS[service]
-        for finding in checker(session):
+        report: ServiceReport = checker(session)
+        for finding in report.findings:
             findings[finding.key()] = finding
+        inventory.extend(report.inventory)
 
-    return sorted(findings.values(), key=_finding_sort_key)
+    ordered_findings = sorted(findings.values(), key=_finding_sort_key)
+    return AuditResults(findings=ordered_findings, inventory=inventory)
+
+
+def collect_findings(session: boto3.session.Session, services: Iterable[str]) -> List[Finding]:
+    """Run all requested service checks and return de-duplicated findings."""
+
+    return collect_audit_results(session, services).findings
 
 
 def print_findings(findings: Iterable[Finding]) -> None:
@@ -101,4 +122,45 @@ def export_findings_to_excel(findings: Iterable[Finding], path: str) -> str:
     return path
 
 
-__all__ = ["collect_findings", "print_findings", "export_findings_to_excel"]
+def export_inventory_to_excel(inventory: Iterable[InventoryItem], path: str) -> str:
+    """Write *inventory* to an Excel workbook located at *path*."""
+
+    try:
+        from openpyxl import Workbook
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:  # pragma: no cover - dependency missing during tests
+        raise RuntimeError(
+            "The 'openpyxl' package is required to export inventory to Excel. "
+            "Install it with 'pip install openpyxl'."
+        ) from exc
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Inventory"
+
+    headers = ["Service", "Resource ID", "Status", "Details"]
+    sheet.append(headers)
+    column_widths = [len(header) for header in headers]
+
+    for item in inventory:
+        row = [item.service, item.resource_id, item.status, item.details]
+        sheet.append(row)
+        for idx, value in enumerate(row):
+            column_widths[idx] = max(column_widths[idx], len(str(value)))
+
+    for idx, width in enumerate(column_widths, start=1):
+        column_letter = get_column_letter(idx)
+        sheet.column_dimensions[column_letter].width = min(width + 2, 60)
+
+    workbook.save(path)
+    return path
+
+
+__all__ = [
+    "AuditResults",
+    "collect_audit_results",
+    "collect_findings",
+    "export_findings_to_excel",
+    "export_inventory_to_excel",
+    "print_findings",
+]
