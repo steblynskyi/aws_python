@@ -80,7 +80,7 @@ def build_icon_label(
 
     icon_cell = (
         f'<TD BGCOLOR="{icon_bgcolor}" ALIGN="CENTER" VALIGN="MIDDLE" WIDTH="32" '
-        f'FIXEDSIZE="TRUE"><FONT COLOR="{icon_color}"><B>{escape_label(icon_text)}</B></FONT></TD>'
+        f'HEIGHT="32" FIXEDSIZE="TRUE"><FONT COLOR="{icon_color}"><B>{escape_label(icon_text)}</B></FONT></TD>'
     )
 
     label = (
