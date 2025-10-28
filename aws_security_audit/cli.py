@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import boto3
 
+from .compliance import COMPLIANCE_SERVICE_MAP, expand_compliance_frameworks
 from .core import (
     collect_audit_results,
     collect_findings,
@@ -31,6 +32,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         nargs="*",
         default=None,
         help="Subset of services to audit (default: all)",
+    )
+    parser.add_argument(
+        "--compliance",
+        nargs="*",
+        choices=sorted(COMPLIANCE_SERVICE_MAP),
+        default=None,
+        help="Limit checks to service sets aligned with compliance frameworks (e.g., hipaa)",
     )
     parser.add_argument("--json", dest="json_path", help="Optional path to export findings as JSON")
     parser.add_argument(
@@ -58,6 +66,40 @@ def main(argv: Optional[List[str]] = None) -> int:
     session = boto3.Session(profile_name=args.profile, region_name=args.region)
 
     selected_services = args.services if args.services else list(SERVICE_CHECKS)
+    if args.compliance:
+        try:
+            compliance_services = expand_compliance_frameworks(args.compliance)
+        except (RuntimeError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+        if args.services:
+            filtered_services = []
+            excluded_services = []
+            for service in args.services:
+                key = service.lower()
+                if key in compliance_services:
+                    filtered_services.append(service)
+                else:
+                    excluded_services.append(service)
+
+            if excluded_services:
+                print(
+                    "Warning: Ignoring services not covered by the selected compliance "
+                    f"frameworks: {', '.join(sorted(set(excluded_services)))}",
+                    file=sys.stderr,
+                )
+
+            if not filtered_services:
+                print(
+                    "Error: None of the requested services are part of the selected compliance frameworks.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            selected_services = filtered_services
+        else:
+            selected_services = sorted(compliance_services)
 
     try:
         results = collect_audit_results(session, selected_services)

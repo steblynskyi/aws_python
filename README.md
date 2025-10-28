@@ -86,6 +86,8 @@ python -m aws_security_audit --profile myprofile --region us-east-1 \
 
 - `--services` allows limiting the scan to specific services (e.g.
   `--services s3 iam`).
+- `--compliance` limits checks to service bundles that align with named
+  compliance frameworks (e.g., `--compliance hipaa`).
 - `--json` exports the findings to a JSON file for further processing.
 - `--excel` exports the findings to an Excel workbook (requires `openpyxl`).
 - `--inventory-excel` writes the detailed resource inventory to a separate
@@ -95,3 +97,11 @@ python -m aws_security_audit --profile myprofile --region us-east-1 \
 
 The script prints a table summarizing all detected findings. Findings are
 categorized by severity (HIGH, MEDIUM, LOW, WARNING, ERROR).
+
+### Compliance presets
+
+Use the `--compliance` flag to run only the service checks that map to a
+particular regulatory framework. The current `hipaa` preset targets network
+segmentation, encryption, and access controls by enabling the VPC, EC2, S3,
+IAM, RDS, KMS, ACM, SSM, EKS, and ECS audits. Combine the flag with
+`--services` to narrow the scope further when needed.
