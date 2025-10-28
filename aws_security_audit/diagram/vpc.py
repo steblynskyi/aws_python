@@ -305,7 +305,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     row_count = 2 + (1 if cell.instances else 0)
     icon_cell = (
         f'<TD ROWSPAN="{row_count}" BGCOLOR="{icon_bgcolor}" ALIGN="CENTER" '
-        f'VALIGN="TOP" WIDTH="32" FIXEDSIZE="TRUE"><FONT COLOR="#ffffff">'
+        f'VALIGN="TOP" WIDTH="32" HEIGHT="32" FIXEDSIZE="TRUE"><FONT COLOR="#ffffff">'
         f'<B>{escape_label(icon_text)}</B></FONT></TD>'
     )
 
