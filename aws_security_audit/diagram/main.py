@@ -76,8 +76,8 @@ def _create_graph() -> "Digraph":
     graph.attr(rankdir="TB")
     graph.attr(bgcolor="white")
     graph.attr(fontname="Helvetica")
-    graph.node_attr.update(fontname="Helvetica", fontsize="11")
-    graph.edge_attr.update(fontname="Helvetica", fontsize="10")
+    graph.node_attr.update(fontname="Helvetica", fontsize="12")
+    graph.edge_attr.update(fontname="Helvetica", fontsize="11")
     return graph
 
 

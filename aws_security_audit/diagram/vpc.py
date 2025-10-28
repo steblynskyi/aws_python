@@ -265,36 +265,36 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     subnet_lines = []
     if cell.name:
         subnet_lines.append(f"<B>{escape_label(cell.name)}</B>")
-    subnet_lines.append(f'<FONT POINT-SIZE="10">{escape_label(cell.subnet_id)}</FONT>')
+    subnet_lines.append(f'<FONT POINT-SIZE="11">{escape_label(cell.subnet_id)}</FONT>')
     if cell.cidr:
         subnet_lines.append(escape_label(cell.cidr))
     if cell.az:
         subnet_lines.append(escape_label(cell.az))
     if cell.route_summary:
         subnet_lines.append(
-            f'<FONT POINT-SIZE="9" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
+            f'<FONT POINT-SIZE="11" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
         )
 
     subnet_html = '<BR ALIGN="LEFT"/>'.join(subnet_lines)
 
-    route_html = '<FONT POINT-SIZE="9" COLOR="#2d3748"><I>No non-local routes</I></FONT>'
+    route_html = '<FONT POINT-SIZE="11" COLOR="#2d3748"><I>No non-local routes</I></FONT>'
     if cell.route_summary:
         route_lines = []
         if cell.route_summary.name:
-            route_lines.append(f"<B>{escape_label(cell.route_summary.name)}</B>")
-        route_lines.append(escape_label(cell.route_summary.route_table_id))
+            route_lines.append(f'<FONT POINT-SIZE="11"><B>{escape_label(cell.route_summary.name)}</B></FONT>')
+        route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(cell.route_summary.route_table_id)}</FONT>')
         if cell.route_summary.routes:
             for route in cell.route_summary.routes:
-                route_lines.append(escape_label(route.display_text()))
+                route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(route.display_text())}</FONT>')
         else:
-            route_lines.append("No non-local routes")
+            route_lines.append('<FONT POINT-SIZE="11">No non-local routes</FONT>')
         route_html = '<BR ALIGN="LEFT"/>'.join(route_lines)
 
     instance_row = ""
     if cell.instances:
-        instance_lines = ["<B>Instances</B>"]
+        instance_lines = ['<FONT POINT-SIZE="11"><B>Instances</B></FONT>']
         for instance in cell.instances:
-            instance_lines.append(escape_label(instance.display_text()))
+            instance_lines.append(f'<FONT POINT-SIZE="11">{escape_label(instance.display_text())}</FONT>')
         instance_html = '<BR ALIGN="LEFT"/>'.join(instance_lines)
         instance_row = (
             '<TR><TD BGCOLOR="#eef2ff"><FONT COLOR="#1a365d">'
