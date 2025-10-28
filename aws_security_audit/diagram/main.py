@@ -44,11 +44,11 @@ from .vpc import (
 
 
 TIER_ORDER = [
-    ("ingress", "Ingress (IGW / NAT)"),
-    ("public", "Public Subnets"),
-    ("private_app", "Private App Subnets"),
-    ("private_data", "Private Data Subnets"),
-    ("shared", "Shared / Directories"),
+    ("ingress", "Edge Connectivity (IGW / NAT)"),
+    ("public", "Public Access Tier"),
+    ("private_app", "Application Services Tier"),
+    ("private_data", "Data Services Tier"),
+    ("shared", "Shared Services Tier"),
 ]
 
 def build_global_service_label(summary: GlobalServiceSummary) -> str:
@@ -62,7 +62,7 @@ def build_global_service_label(summary: GlobalServiceSummary) -> str:
         for line in summary.lines:
             label += f'<TR><TD ALIGN="LEFT">{escape_label(line)}</TD></TR>'
     else:
-        label += '<TR><TD ALIGN="LEFT">No resources found</TD></TR>'
+        label += '<TR><TD ALIGN="LEFT">No applicable resources identified</TD></TR>'
     label += '</TABLE>>'
     return label
 
@@ -278,8 +278,8 @@ def _render_vpc_cluster(
         vpc_graph.attr(bgcolor="#f8fafc")
 
         internet_label = build_icon_label(
-            "Internet",
-            [f"VPC {vpc_id}"],
+            "Internet Edge",
+            [f"Connected VPC: {vpc_id}", "External connectivity"],
             icon_text="WWW",
             icon_bgcolor="#1a202c",
             body_bgcolor="#edf2f7",
@@ -349,11 +349,11 @@ def _render_vpc_cluster(
             )
             nat_details = []
             if az:
-                nat_details.append(f"AZ: {az}")
+                nat_details.append(f"Availability Zone: {az}")
             if eip:
-                nat_details.append(f"Elastic IP: {eip}")
+                nat_details.append(f"Elastic IP Address: {eip}")
             if subnet_id:
-                nat_details.append(f"Subnet: {subnet_id}")
+                nat_details.append(f"Subnet Association: {subnet_id}")
             nat_label = build_icon_label(
                 nat_id,
                 nat_details,
@@ -429,7 +429,7 @@ def _render_vpc_cluster(
                     label_map = {
                         "egress_only_internet_gateway": build_icon_label(
                             node_id,
-                            ["Egress-only IGW"],
+                            ["Egress-only Internet Gateway"],
                             icon_text="EIGW",
                             icon_bgcolor="#2d3748",
                             body_bgcolor="#f7fafc",
@@ -438,7 +438,7 @@ def _render_vpc_cluster(
                         ),
                         "transit_gateway": build_icon_label(
                             node_id,
-                            ["Transit Gateway"],
+                            ["Transit Gateway Attachment"],
                             icon_text="TGW",
                             icon_bgcolor="#2c5282",
                             body_bgcolor="#ebf8ff",
@@ -447,7 +447,7 @@ def _render_vpc_cluster(
                         ),
                         "vpc_peering_connection": build_icon_label(
                             node_id,
-                            ["VPC Peering"],
+                            ["VPC Peering Connection"],
                             icon_text="PCX",
                             icon_bgcolor="#2c5282",
                             body_bgcolor="#f7fafc",
@@ -676,8 +676,8 @@ def _render_vpc_cluster(
                 (
                     "public",
                     build_icon_label(
-                        "Public Subnet",
-                        ["CIDR: 10.0.0.0/24"],
+                        "Public Access Subnet",
+                        ["Example CIDR: 10.0.0.0/24"],
                         icon_text="PUB",
                         icon_bgcolor="#047857",
                         body_bgcolor="#ccebd4",
@@ -688,8 +688,8 @@ def _render_vpc_cluster(
                 (
                     "private",
                     build_icon_label(
-                        "Private App Subnet",
-                        ["CIDR: 10.0.1.0/24"],
+                        "Application Subnet",
+                        ["Example CIDR: 10.0.1.0/24"],
                         icon_text="APP",
                         icon_bgcolor="#1d4ed8",
                         body_bgcolor="#cfe3ff",
@@ -700,8 +700,8 @@ def _render_vpc_cluster(
                 (
                     "isolated",
                     build_icon_label(
-                        "Isolated Subnet",
-                        ["CIDR: 10.0.2.0/24"],
+                        "Isolated Data Subnet",
+                        ["Example CIDR: 10.0.2.0/24"],
                         icon_text="ISO",
                         icon_bgcolor="#4a5568",
                         body_bgcolor="#e2e2e2",
@@ -713,7 +713,7 @@ def _render_vpc_cluster(
                     "nat",
                     build_icon_label(
                         "NAT Gateway",
-                        ["Elastic IP association"],
+                        ["Provides outbound internet routing"],
                         icon_text="NAT",
                         icon_bgcolor="#b7791f",
                         body_bgcolor="#fff7e6",
@@ -725,7 +725,7 @@ def _render_vpc_cluster(
                     "vpce",
                     build_icon_label(
                         "VPC Endpoint",
-                        ["Interface example"],
+                        ["Interface endpoint example"],
                         icon_text="VPCE",
                         icon_bgcolor="#4c51bf",
                         body_bgcolor="#e8e8ff",
@@ -737,7 +737,7 @@ def _render_vpc_cluster(
                     "instances",
                     build_icon_label(
                         "EC2 Instance",
-                        ["Private IP: 10.0.0.12"],
+                        ["Private IP example: 10.0.0.12"],
                         icon_text="EC2",
                         icon_bgcolor="#3730a3",
                         body_bgcolor="#eef2ff",
@@ -749,7 +749,7 @@ def _render_vpc_cluster(
                     "rds",
                     build_icon_label(
                         "RDS Instance",
-                        ["Engine: postgres"],
+                        ["Engine example: postgres"],
                         icon_text="RDS",
                         icon_bgcolor="#9b2c2c",
                         body_bgcolor="#fdebd0",
@@ -761,7 +761,7 @@ def _render_vpc_cluster(
                     "igw",
                     build_icon_label(
                         "Internet Gateway",
-                        ["Internet access"],
+                        ["Provides inbound and outbound internet access"],
                         icon_text="IGW",
                         icon_bgcolor="#2d3748",
                         body_bgcolor="#f7fafc",
@@ -775,8 +775,8 @@ def _render_vpc_cluster(
                     (
                         "global_service",
                         build_icon_label(
-                            "Global Service Panel",
-                            ["Aggregated account view"],
+                            "Global Service Overview",
+                            ["Aggregated account insight"],
                             icon_text="GLB",
                             icon_bgcolor="#2c5282",
                             body_bgcolor="#f7fafc",
@@ -807,7 +807,7 @@ def _render_global_services_cluster(
     graph: "Digraph", global_services: List[GlobalServiceSummary]
 ) -> None:
     with graph.subgraph(name="cluster_global_services") as global_graph:
-        global_graph.attr(label="<<B>Global / Regional Services</B>>")
+        global_graph.attr(label="<<B>Global and Regional Services Overview</B>>")
         global_graph.attr(style="rounded")
         global_graph.attr(color="#4a5568")
         global_graph.attr(bgcolor="#f7fafc")
