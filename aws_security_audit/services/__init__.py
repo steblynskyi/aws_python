@@ -1,11 +1,12 @@
 """Service-specific audit entry points."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Callable, Dict, List
 
 import boto3
 
-from ..findings import Finding
+from ..findings import Finding, InventoryItem
 from .acm import audit_acm_certificates
 from .ec2 import audit_ec2_instances
 from .ecs import audit_ecs_clusters
@@ -18,7 +19,15 @@ from .s3 import audit_s3_buckets
 from .ssm import audit_ssm_managed_instances
 from .vpc import audit_vpcs
 
-ServiceChecker = Callable[[boto3.session.Session], List[Finding]]
+@dataclass
+class ServiceReport:
+    """Aggregated findings and inventory emitted by a service audit."""
+
+    findings: List[Finding]
+    inventory: List[InventoryItem]
+
+
+ServiceChecker = Callable[[boto3.session.Session], ServiceReport]
 
 SERVICE_CHECKS: Dict[str, ServiceChecker] = {
     "vpc": audit_vpcs,
@@ -34,4 +43,4 @@ SERVICE_CHECKS: Dict[str, ServiceChecker] = {
     "ecs": audit_ecs_clusters,
 }
 
-__all__ = ["SERVICE_CHECKS", "ServiceChecker"]
+__all__ = ["SERVICE_CHECKS", "ServiceChecker", "ServiceReport"]

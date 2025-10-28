@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .core import collect_findings, print_findings
-from .findings import Finding
+from .core import collect_audit_results, collect_findings, print_findings
+from .findings import Finding, InventoryItem
 
 try:  # Network diagram generation is an optional feature
     from .diagram import generate_network_diagram
@@ -23,4 +23,11 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised only when opt
     else:
         raise
 
-__all__ = ["Finding", "collect_findings", "generate_network_diagram", "print_findings"]
+__all__ = [
+    "Finding",
+    "InventoryItem",
+    "collect_audit_results",
+    "collect_findings",
+    "generate_network_diagram",
+    "print_findings",
+]

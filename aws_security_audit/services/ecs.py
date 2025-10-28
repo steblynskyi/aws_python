@@ -6,14 +6,16 @@ from typing import Iterable, List
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from ..findings import Finding
+from ..findings import Finding, InventoryItem
 from ..utils import batch_iterable, finding_from_exception, safe_paginate
+from . import ServiceReport
 
 
-def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
+def audit_ecs_clusters(session: boto3.session.Session) -> ServiceReport:
     """Inspect ECS clusters for observability and exec support."""
 
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     ecs = session.client("ecs")
     try:
         cluster_arns = list(safe_paginate(ecs, "list_clusters", "clusterArns"))
@@ -32,12 +34,21 @@ def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
                             resource_id=arn,
                         )
                     )
+                    inventory.append(
+                        InventoryItem(
+                            service="ECS",
+                            resource_id=arn,
+                            status="ERROR",
+                            details=f"Failed to describe cluster: {exc}",
+                        )
+                    )
                 continue
             for cluster in response.get("clusters", []):
                 arn = cluster.get("clusterArn", "unknown")
+                cluster_findings: List[Finding] = []
                 insights = {setting.get("name"): setting.get("value") for setting in cluster.get("settings", [])}
                 if insights.get("containerInsights") != "enabled":
-                    findings.append(
+                    cluster_findings.append(
                         Finding(
                             service="ECS",
                             resource_id=arn,
@@ -46,7 +57,7 @@ def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
                         )
                     )
                 if not cluster.get("configuration", {}).get("executeCommandConfiguration"):
-                    findings.append(
+                    cluster_findings.append(
                         Finding(
                             service="ECS",
                             resource_id=arn,
@@ -54,11 +65,34 @@ def audit_ecs_clusters(session: boto3.session.Session) -> List[Finding]:
                             message="ECS Exec is not configured.",
                         )
                     )
+                findings.extend(cluster_findings)
+                if cluster_findings:
+                    details = "; ".join(f.message for f in cluster_findings)
+                    status = "NON_COMPLIANT"
+                else:
+                    details = "All checks passed."
+                    status = "COMPLIANT"
+                inventory.append(
+                    InventoryItem(
+                        service="ECS",
+                        resource_id=arn,
+                        status=status,
+                        details=details,
+                    )
+                )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception("ECS", "Failed to list ECS clusters", exc)
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="ECS",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to list ECS clusters: {exc}",
+            )
+        )
+    return ServiceReport(findings=findings, inventory=inventory)
 
 
 __all__ = ["audit_ecs_clusters"]

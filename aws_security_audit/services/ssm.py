@@ -6,20 +6,23 @@ from typing import List
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from ..findings import Finding
+from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
+from . import ServiceReport
 
 
-def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]:
+def audit_ssm_managed_instances(session: boto3.session.Session) -> ServiceReport:
     """Inspect Systems Manager managed instances for connectivity and patches."""
 
     findings: List[Finding] = []
+    inventory: List[InventoryItem] = []
     ssm = session.client("ssm")
     try:
         for instance in safe_paginate(ssm, "describe_instance_information", "InstanceInformationList"):
             instance_id = instance.get("InstanceId")
+            instance_findings: List[Finding] = []
             if instance.get("PingStatus") != "Online":
-                findings.append(
+                instance_findings.append(
                     Finding(
                         service="SSM",
                         resource_id=instance_id or "unknown",
@@ -29,7 +32,7 @@ def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]
                 )
             patch_state = instance.get("PatchStatus")
             if patch_state and patch_state.get("PatchState") not in {"INSTALLED", "INSTALLED_OTHER"}:
-                findings.append(
+                instance_findings.append(
                     Finding(
                         service="SSM",
                         resource_id=instance_id or "unknown",
@@ -37,9 +40,32 @@ def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]
                         message=f"Patch compliance state is {patch_state.get('PatchState')}.",
                     )
                 )
+            findings.extend(instance_findings)
+            if instance_findings:
+                details = "; ".join(f.message for f in instance_findings)
+                status = "NON_COMPLIANT"
+            else:
+                details = "All checks passed."
+                status = "COMPLIANT"
+            inventory.append(
+                InventoryItem(
+                    service="SSM",
+                    resource_id=instance_id or "unknown",
+                    status=status,
+                    details=details,
+                )
+            )
     except ClientError as exc:
         findings.append(
             finding_from_exception("SSM", "Failed to describe SSM instances", exc)
+        )
+        inventory.append(
+            InventoryItem(
+                service="SSM",
+                resource_id="*",
+                status="ERROR",
+                details=f"Failed to describe SSM instances: {exc}",
+            )
         )
     except EndpointConnectionError:
         # Systems Manager is not available in every region.
@@ -51,7 +77,15 @@ def audit_ssm_managed_instances(session: boto3.session.Session) -> List[Finding]
                 message="SSM endpoint is not available in the selected region.",
             )
         )
-    return findings
+        inventory.append(
+            InventoryItem(
+                service="SSM",
+                resource_id="*",
+                status="ERROR",
+                details="SSM endpoint is not available in the selected region.",
+            )
+        )
+    return ServiceReport(findings=findings, inventory=inventory)
 
 
 __all__ = ["audit_ssm_managed_instances"]
