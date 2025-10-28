@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .compliance import COMPLIANCE_SERVICE_MAP, expand_compliance_frameworks
 from .core import collect_audit_results, collect_findings, print_findings
 from .findings import Finding, InventoryItem
 
@@ -26,6 +27,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised only when opt
 __all__ = [
     "Finding",
     "InventoryItem",
+    "COMPLIANCE_SERVICE_MAP",
+    "expand_compliance_frameworks",
     "collect_audit_results",
     "collect_findings",
     "generate_network_diagram",
