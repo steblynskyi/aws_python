@@ -251,6 +251,17 @@ def build_subnet_cell(
 def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
 
+    icon_map = {
+        "public": ("PUB", "#047857"),
+        "private_app": ("APP", "#1d4ed8"),
+        "private_data": ("DB", "#1e3a8a"),
+        "shared": ("SHR", "#4a5568"),
+    }
+    icon_text, icon_bgcolor = icon_map.get(cell.classification, ("SUB", "#2d3748"))
+    if cell.is_isolated:
+        icon_text = "ISO"
+        icon_bgcolor = "#4a5568"
+
     subnet_lines = []
     if cell.name:
         subnet_lines.append(f"<B>{escape_label(cell.name)}</B>")
@@ -264,7 +275,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
             f'<FONT POINT-SIZE="11" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
         )
 
-    subnet_html = "<BR/>".join(subnet_lines)
+    subnet_html = '<BR ALIGN="LEFT"/>'.join(subnet_lines)
 
     route_html = '<FONT POINT-SIZE="11" COLOR="#2d3748"><I>No non-local routes</I></FONT>'
     if cell.route_summary:
@@ -291,9 +302,26 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
             '</FONT></TD></TR>'
         )
 
+    row_count = 2 + (1 if cell.instances else 0)
+    icon_cell_attributes = [
+        f'ROWSPAN="{row_count}"',
+        f'BGCOLOR="{icon_bgcolor}"',
+        'ALIGN="CENTER"',
+        'VALIGN="TOP"',
+        'WIDTH="32"',
+        'HEIGHT="32"',
+    ]
+    # Avoid a fixed-size icon column so that labels with longer icon text can
+    # expand without triggering Graphviz ``cell size too small`` warnings.
+    icon_cell = (
+        f'<TD {" ".join(icon_cell_attributes)}><FONT COLOR="#ffffff">'
+        f'<B>{escape_label(icon_text)}</B></FONT></TD>'
+    )
+
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-        f'<TR><TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
+        f'<TR>{icon_cell}'
+        f'<TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
         f'<TR><TD PORT="routes" BGCOLOR="#fff6d1"><FONT COLOR="#5c3d0c">{route_html}</FONT></TD></TR>'
         f"{instance_row}"
         '</TABLE>>'
