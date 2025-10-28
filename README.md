@@ -80,13 +80,16 @@ pip install -r requirements.txt
 
 ```bash
 python -m aws_security_audit --profile myprofile --region us-east-1 \
-  --json findings.json --excel findings.xlsx --diagram network
+  --json findings.json --excel findings.xlsx --inventory-excel inventory.xlsx \
+  --diagram network
 ```
 
 - `--services` allows limiting the scan to specific services (e.g.
   `--services s3 iam`).
 - `--json` exports the findings to a JSON file for further processing.
 - `--excel` exports the findings to an Excel workbook (requires `openpyxl`).
+- `--inventory-excel` writes the detailed resource inventory to a separate
+  Excel workbook (requires `openpyxl`).
 - `--diagram` writes a `graphviz` diagram (the script appends the
   extension based on the renderer format).
 
