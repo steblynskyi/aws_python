@@ -7,6 +7,17 @@ from typing import Callable, Dict, List
 import boto3
 
 from ..findings import Finding, InventoryItem
+
+@dataclass
+class ServiceReport:
+    """Aggregated findings and inventory emitted by a service audit."""
+
+    findings: List[Finding]
+    inventory: List[InventoryItem]
+
+
+ServiceChecker = Callable[[boto3.session.Session], ServiceReport]
+
 from .acm import audit_acm_certificates
 from .ec2 import audit_ec2_instances
 from .ecs import audit_ecs_clusters
@@ -18,16 +29,6 @@ from .route53 import audit_route53_zones
 from .s3 import audit_s3_buckets
 from .ssm import audit_ssm_managed_instances
 from .vpc import audit_vpcs
-
-@dataclass
-class ServiceReport:
-    """Aggregated findings and inventory emitted by a service audit."""
-
-    findings: List[Finding]
-    inventory: List[InventoryItem]
-
-
-ServiceChecker = Callable[[boto3.session.Session], ServiceReport]
 
 SERVICE_CHECKS: Dict[str, ServiceChecker] = {
     "vpc": audit_vpcs,
