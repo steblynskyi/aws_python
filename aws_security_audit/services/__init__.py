@@ -25,22 +25,34 @@ def inventory_item_from_findings(
     resource_findings: Iterable[Finding],
     *,
     compliant_details: str = "All checks passed.",
+    extra_details: Iterable[str] | None = None,
 ) -> InventoryItem:
-    """Build an :class:`InventoryItem` summarising ``resource_findings``."""
+    """Build an :class:`InventoryItem` summarising ``resource_findings``.
+
+    ``extra_details`` allows callers to append contextual information regardless of
+    whether the resource is compliant, ensuring the details surface alongside any
+    findings.
+    """
 
     messages = [finding.message for finding in resource_findings]
+    extra_parts = [detail for detail in (extra_details or []) if detail]
     if messages:
+        if extra_parts:
+            messages.extend(extra_parts)
         return InventoryItem(
             service=service,
             resource_id=resource_id,
             status="NON_COMPLIANT",
             details="; ".join(messages),
         )
+
+    details_parts = [compliant_details] if compliant_details else []
+    details_parts.extend(extra_parts)
     return InventoryItem(
         service=service,
         resource_id=resource_id,
         status="COMPLIANT",
-        details=compliant_details,
+        details="; ".join(details_parts),
     )
 
 from .acm import audit_acm_certificates

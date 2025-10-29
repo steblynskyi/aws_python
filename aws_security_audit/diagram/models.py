@@ -101,6 +101,8 @@ class Ec2Resources:
     internet_gateways: List[dict]
     vpc_endpoints: List[dict]
     vpc_peering_connections: List[dict]
+    vpn_connections: List[dict]
+    customer_gateways: List[dict]
     reservations: List[dict]
 
 
@@ -118,6 +120,8 @@ class DiagramContext:
     internet_gateways: Dict[str, dict]
     vpc_endpoints_by_vpc: Dict[str, List[dict]]
     vpc_peering_connections: Dict[str, dict]
+    vpn_connections_by_vgw: Dict[str, List[dict]]
+    customer_gateways: Dict[str, dict]
 
 
 def summarize_global_service_lines(

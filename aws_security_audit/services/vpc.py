@@ -1,7 +1,7 @@
 """Audit helpers for Amazon VPC resources."""
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import boto3
 from botocore.client import BaseClient
@@ -206,43 +206,9 @@ def _audit_vpn_connections(ec2: BaseClient) -> Tuple[List[Finding], List[Invento
     findings: List[Finding] = []
     inventory: List[InventoryItem] = []
     try:
-        for vpn in safe_paginate(ec2, "describe_vpn_connections", "VpnConnections"):
-            vpn_id = vpn.get("VpnConnectionId", "unknown")
-            vpn_findings: List[Finding] = []
-            state = vpn.get("State")
-            if state and state != "available":
-                vpn_findings.append(
-                    Finding(
-                        service="VPC",
-                        resource_id=vpn_id,
-                        severity="MEDIUM",
-                        message=f"Site-to-site VPN connection not in available state (state={state}).",
-                    )
-                )
-            for telemetry in vpn.get("VgwTelemetry", []):
-                status = telemetry.get("Status")
-                outside_ip = telemetry.get("OutsideIpAddress")
-                if status and status != "UP":
-                    vpn_findings.append(
-                        Finding(
-                            service="VPC",
-                            resource_id=vpn_id,
-                            severity="HIGH",
-                            message=(
-                                "VPN tunnel endpoint %s is reporting status %s."
-                                % (outside_ip or "unknown", status)
-                            ),
-                        )
-                    )
-            findings.extend(vpn_findings)
-            inventory.append(
-                inventory_item_from_findings(
-                    "VPC",
-                    vpn_id,
-                    vpn_findings,
-                    compliant_details="VPN connection is available.",
-                )
-            )
+        vpn_connections = list(
+            safe_paginate(ec2, "describe_vpn_connections", "VpnConnections")
+        )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception("VPC", "Failed to describe VPN connections", exc)
@@ -255,6 +221,97 @@ def _audit_vpn_connections(ec2: BaseClient) -> Tuple[List[Finding], List[Invento
                 details=f"Failed to describe VPN connections: {exc}",
             )
         )
+        return findings, inventory
+
+    customer_gateway_addresses: Dict[str, str] = {}
+    customer_gateway_ids = sorted(
+        {
+            vpn.get("CustomerGatewayId")
+            for vpn in vpn_connections
+            if vpn.get("CustomerGatewayId")
+        }
+    )
+    if customer_gateway_ids:
+        try:
+            for gateway in safe_paginate(
+                ec2,
+                "describe_customer_gateways",
+                "CustomerGateways",
+                CustomerGatewayIds=customer_gateway_ids,
+            ):
+                gateway_id = gateway.get("CustomerGatewayId")
+                address = gateway.get("IpAddress")
+                if gateway_id and address:
+                    customer_gateway_addresses[gateway_id] = address
+        except (ClientError, EndpointConnectionError) as exc:
+            findings.append(
+                finding_from_exception("VPC", "Failed to describe customer gateways", exc)
+            )
+            inventory.append(
+                InventoryItem(
+                    service="VPC",
+                    resource_id="*",
+                    status="ERROR",
+                    details=f"Failed to describe customer gateways: {exc}",
+                )
+            )
+
+    for vpn in vpn_connections:
+        vpn_id = vpn.get("VpnConnectionId", "unknown")
+        vpn_findings: List[Finding] = []
+        state = vpn.get("State")
+        if state and state != "available":
+            vpn_findings.append(
+                Finding(
+                    service="VPC",
+                    resource_id=vpn_id,
+                    severity="MEDIUM",
+                    message=f"Site-to-site VPN connection not in available state (state={state}).",
+                )
+            )
+        for telemetry in vpn.get("VgwTelemetry", []):
+            status = telemetry.get("Status")
+            outside_ip = telemetry.get("OutsideIpAddress")
+            if status and status != "UP":
+                vpn_findings.append(
+                    Finding(
+                        service="VPC",
+                        resource_id=vpn_id,
+                        severity="HIGH",
+                        message=(
+                            "VPN tunnel endpoint %s is reporting status %s."
+                            % (outside_ip or "unknown", status)
+                        ),
+                    )
+                )
+
+        extra_details: List[str] = []
+        vpn_name = next(
+            (tag.get("Value") for tag in vpn.get("Tags", []) if tag.get("Key") == "Name"),
+            None,
+        )
+        if vpn_name:
+            extra_details.append(f"Name: {vpn_name}")
+
+        customer_gateway_id = vpn.get("CustomerGatewayId")
+        if customer_gateway_id:
+            customer_gateway_address = customer_gateway_addresses.get(customer_gateway_id)
+            if customer_gateway_address:
+                extra_details.append(
+                    f"Customer gateway address: {customer_gateway_address}"
+                )
+
+        findings.extend(vpn_findings)
+        inventory.append(
+            inventory_item_from_findings(
+                "VPC",
+                vpn_id,
+                vpn_findings,
+                compliant_details="VPN connection is available.",
+                extra_details=extra_details,
+            )
+        )
+
     return findings, inventory
 
 
