@@ -97,6 +97,11 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
         vpc_endpoints = list(
             safe_paginate(ec2, "describe_vpc_endpoints", "VpcEndpoints")
         )
+        vpc_peering_connections = list(
+            safe_paginate(
+                ec2, "describe_vpc_peering_connections", "VpcPeeringConnections"
+            )
+        )
         reservations = list(
             safe_paginate(
                 ec2,
@@ -126,6 +131,7 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
         nat_gateways=nat_gateways,
         internet_gateways=internet_gateways,
         vpc_endpoints=vpc_endpoints,
+        vpc_peering_connections=vpc_peering_connections,
         reservations=reservations,
     )
 
@@ -184,6 +190,12 @@ def _prepare_context(
     for endpoint in resources.vpc_endpoints:
         vpc_endpoints_by_vpc.setdefault(endpoint.get("VpcId", ""), []).append(endpoint)
 
+    vpc_peering_connections = {
+        connection.get("VpcPeeringConnectionId", ""): connection
+        for connection in resources.vpc_peering_connections
+        if connection.get("VpcPeeringConnectionId")
+    }
+
     return DiagramContext(
         resources=resources,
         subnets_by_vpc=subnets_by_vpc,
@@ -194,7 +206,48 @@ def _prepare_context(
         rds_instances_by_vpc=rds_instances_by_vpc,
         internet_gateways=internet_gateways,
         vpc_endpoints_by_vpc=vpc_endpoints_by_vpc,
+        vpc_peering_connections=vpc_peering_connections,
     )
+
+
+def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
+    cidrs: List[str] = []
+    cidr_block = vpc_info.get("CidrBlock")
+    if cidr_block:
+        cidrs.append(cidr_block)
+
+    for block in vpc_info.get("CidrBlockSet", []) or []:
+        value = block.get("CidrBlock")
+        if value:
+            cidrs.append(value)
+
+    for block in vpc_info.get("Ipv6CidrBlockSet", []) or []:
+        value = block.get("Ipv6CidrBlock")
+        if value:
+            cidrs.append(value)
+
+    return cidrs
+
+
+def _format_vpc_peering_lines(connection: dict) -> List[str]:
+    requester = connection.get("RequesterVpcInfo", {}) or {}
+    accepter = connection.get("AccepterVpcInfo", {}) or {}
+
+    requester_vpc = requester.get("VpcId") or "Unknown VPC"
+    accepter_vpc = accepter.get("VpcId") or "Unknown VPC"
+
+    requester_cidrs = _collect_vpc_cidrs(requester)
+    accepter_cidrs = _collect_vpc_cidrs(accepter)
+
+    lines = [f"Requester: {requester_vpc}"]
+    if requester_cidrs:
+        lines.append(f"Requester CIDRs: {', '.join(requester_cidrs)}")
+
+    lines.append(f"Accepter: {accepter_vpc}")
+    if accepter_cidrs:
+        lines.append(f"Accepter CIDRs: {', '.join(accepter_cidrs)}")
+
+    return lines
 
 
 def generate_network_diagram(session: boto3.session.Session, output_path: str) -> Optional[str]:
@@ -432,64 +485,71 @@ def _render_vpc_cluster(
                     if not node_id or node_id in external_nodes:
                         return external_nodes.get(node_id)
 
-                    label_map = {
-                        "egress_only_internet_gateway": build_icon_label(
+                    label = None
+                    if node_type == "vpc_peering_connection":
+                        connection = context.vpc_peering_connections.get(node_id, {})
+                        lines = _format_vpc_peering_lines(connection) if connection else [
+                            "VPC Peering"
+                        ]
+                        label = build_icon_label(
                             node_id,
-                            ["Egress-only IGW"],
-                            icon_text="EIGW",
-                            icon_bgcolor="#2d3748",
-                            body_bgcolor="#f7fafc",
-                            body_color="#2d3748",
-                            border_color="#2d3748",
-                        ),
-                        "transit_gateway": build_icon_label(
-                            node_id,
-                            ["Transit Gateway"],
-                            icon_text="TGW",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#ebf8ff",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        ),
-                        "vpc_peering_connection": build_icon_label(
-                            node_id,
-                            ["VPC Peering"],
+                            lines,
                             icon_text="PCX",
                             icon_bgcolor="#2c5282",
                             body_bgcolor="#f7fafc",
                             body_color="#1a365d",
                             border_color="#2c5282",
-                        ),
-                        "virtual_private_gateway": build_icon_label(
-                            node_id,
-                            ["Virtual Private Gateway"],
-                            icon_text="VGW",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#edf2f7",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        ),
-                        "carrier_gateway": build_icon_label(
-                            node_id,
-                            ["Carrier Gateway"],
-                            icon_text="CGW",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#f7fafc",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        ),
-                        "local_gateway": build_icon_label(
-                            node_id,
-                            ["Local Gateway"],
-                            icon_text="LGW",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#f7fafc",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        ),
-                    }
+                        )
+                    else:
+                        label_map = {
+                            "egress_only_internet_gateway": build_icon_label(
+                                node_id,
+                                ["Egress-only IGW"],
+                                icon_text="EIGW",
+                                icon_bgcolor="#2d3748",
+                                body_bgcolor="#f7fafc",
+                                body_color="#2d3748",
+                                border_color="#2d3748",
+                            ),
+                            "transit_gateway": build_icon_label(
+                                node_id,
+                                ["Transit Gateway"],
+                                icon_text="TGW",
+                                icon_bgcolor="#2c5282",
+                                body_bgcolor="#ebf8ff",
+                                body_color="#1a365d",
+                                border_color="#2c5282",
+                            ),
+                            "virtual_private_gateway": build_icon_label(
+                                node_id,
+                                ["Virtual Private Gateway"],
+                                icon_text="VGW",
+                                icon_bgcolor="#2c5282",
+                                body_bgcolor="#edf2f7",
+                                body_color="#1a365d",
+                                border_color="#2c5282",
+                            ),
+                            "carrier_gateway": build_icon_label(
+                                node_id,
+                                ["Carrier Gateway"],
+                                icon_text="CGW",
+                                icon_bgcolor="#2c5282",
+                                body_bgcolor="#f7fafc",
+                                body_color="#1a365d",
+                                border_color="#2c5282",
+                            ),
+                            "local_gateway": build_icon_label(
+                                node_id,
+                                ["Local Gateway"],
+                                icon_text="LGW",
+                                icon_bgcolor="#2c5282",
+                                body_bgcolor="#f7fafc",
+                                body_color="#1a365d",
+                                border_color="#2c5282",
+                            ),
+                        }
 
-                    label = label_map.get(node_type)
+                        label = label_map.get(node_type)
 
                     if not label:
                         return None
