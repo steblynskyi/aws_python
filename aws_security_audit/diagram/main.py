@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .html_utils import build_icon_label, escape_label
 
@@ -180,19 +180,20 @@ def _prepare_context(
 
 def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
     cidrs: List[str] = []
-    cidr_block = vpc_info.get("CidrBlock")
-    if cidr_block:
-        cidrs.append(cidr_block)
+    seen: Set[str] = set()
+
+    def _add_cidr(value: Optional[str]) -> None:
+        if value and value not in seen:
+            seen.add(value)
+            cidrs.append(value)
+
+    _add_cidr(vpc_info.get("CidrBlock"))
 
     for block in vpc_info.get("CidrBlockSet", []) or []:
-        value = block.get("CidrBlock")
-        if value:
-            cidrs.append(value)
+        _add_cidr(block.get("CidrBlock"))
 
     for block in vpc_info.get("Ipv6CidrBlockSet", []) or []:
-        value = block.get("Ipv6CidrBlock")
-        if value:
-            cidrs.append(value)
+        _add_cidr(block.get("Ipv6CidrBlock"))
 
     return cidrs
 
