@@ -94,9 +94,6 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
         internet_gateways = list(
             safe_paginate(ec2, "describe_internet_gateways", "InternetGateways")
         )
-        virtual_private_gateways = list(
-            safe_paginate(ec2, "describe_vpn_gateways", "VpnGateways")
-        )
         vpc_endpoints = list(
             safe_paginate(ec2, "describe_vpc_endpoints", "VpcEndpoints")
         )
@@ -133,7 +130,6 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
         route_tables=route_tables,
         nat_gateways=nat_gateways,
         internet_gateways=internet_gateways,
-        virtual_private_gateways=virtual_private_gateways,
         vpc_endpoints=vpc_endpoints,
         vpc_peering_connections=vpc_peering_connections,
         reservations=reservations,
@@ -190,12 +186,6 @@ def _prepare_context(
         gateway["InternetGatewayId"]: gateway for gateway in resources.internet_gateways
     }
 
-    virtual_private_gateways = {
-        gateway.get("VpnGatewayId", ""): gateway
-        for gateway in resources.virtual_private_gateways
-        if gateway.get("VpnGatewayId")
-    }
-
     vpc_endpoints_by_vpc: Dict[str, List[dict]] = {}
     for endpoint in resources.vpc_endpoints:
         vpc_endpoints_by_vpc.setdefault(endpoint.get("VpcId", ""), []).append(endpoint)
@@ -215,7 +205,6 @@ def _prepare_context(
         instances_by_subnet=instances_by_subnet,
         rds_instances_by_vpc=rds_instances_by_vpc,
         internet_gateways=internet_gateways,
-        virtual_private_gateways=virtual_private_gateways,
         vpc_endpoints_by_vpc=vpc_endpoints_by_vpc,
         vpc_peering_connections=vpc_peering_connections,
     )
@@ -342,18 +331,6 @@ def _render_vpc_cluster(
         igw_id
         for igw_id, igw in context.internet_gateways.items()
         if any(att.get("VpcId") == vpc_id for att in igw.get("Attachments", []))
-    ]
-
-    vgw_in_vpc = [
-        (
-            vgw_id,
-            gateway,
-        )
-        for vgw_id, gateway in context.virtual_private_gateways.items()
-        if any(
-            att.get("VpcId") == vpc_id
-            for att in gateway.get("VpcAttachments", []) or []
-        )
     ]
 
     nat_in_vpc = [
@@ -497,52 +474,6 @@ def _render_vpc_cluster(
             igw_node_names.append(node_name)
             igw_node_lookup[igw_id] = node_name
             external_nodes[igw_id] = node_name
-
-        for vgw_id, vgw in vgw_in_vpc:
-            node_name = f"{vgw_id}_node"
-            attachments = [
-                att
-                for att in vgw.get("VpcAttachments", []) or []
-                if att.get("VpcId") == vpc_id
-            ]
-            attachment_states = sorted(
-                {
-                    att.get("State")
-                    for att in attachments
-                    if att.get("State")
-                }
-            )
-            description_lines: List[str] = []
-            gateway_type = vgw.get("Type")
-            if gateway_type:
-                description_lines.append(f"Type: {gateway_type.title()}")
-            if attachment_states:
-                description_lines.append(
-                    f"Attachment: {', '.join(attachment_states)}"
-                )
-            amazon_asn = vgw.get("AmazonSideAsn")
-            if amazon_asn:
-                description_lines.append(f"Amazon ASN: {amazon_asn}")
-            if not description_lines:
-                description_lines.append("Virtual Private Gateway")
-
-            vgw_label = build_icon_label(
-                vgw_id,
-                description_lines,
-                icon_text="VGW",
-                icon_bgcolor="#2c5282",
-                body_bgcolor="#edf2f7",
-                body_color="#1a365d",
-                border_color="#2c5282",
-            )
-            vpc_graph.node(
-                node_name,
-                vgw_label,
-                shape="plaintext",
-                group=center_az or "internet",
-            )
-            tier_nodes["ingress"].setdefault(center_az, []).append(node_name)
-            external_nodes[vgw_id] = node_name
 
         for nat_node in nat_node_names:
             for igw_node in igw_node_names:
