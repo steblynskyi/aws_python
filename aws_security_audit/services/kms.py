@@ -37,6 +37,17 @@ def audit_kms_keys(session: boto3.session.Session) -> ServiceReport:
 
     alias_map = _build_alias_map(kms)
 
+    if not keys:
+        inventory.append(
+            InventoryItem(
+                service="KMS",
+                resource_id="(none)",
+                status="COMPLIANT",
+                details="No customer-managed KMS keys were discovered.",
+            )
+        )
+        return ServiceReport(findings=findings, inventory=inventory)
+
     for key in keys:
         key_id = key.get("KeyId", "")
         if not key_id:
