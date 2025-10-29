@@ -100,6 +100,7 @@ class Ec2Resources:
     nat_gateways: List[dict]
     internet_gateways: List[dict]
     vpc_endpoints: List[dict]
+    vpc_peering_connections: List[dict]
     reservations: List[dict]
 
 
@@ -116,6 +117,7 @@ class DiagramContext:
     rds_instances_by_vpc: Dict[str, List[dict]]
     internet_gateways: Dict[str, dict]
     vpc_endpoints_by_vpc: Dict[str, List[dict]]
+    vpc_peering_connections: Dict[str, dict]
 
 
 def summarize_global_service_lines(
