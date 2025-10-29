@@ -18,12 +18,7 @@ except Exception:  # pragma: no cover - library is optional
     Digraph = None  # type: ignore
     ExecutableNotFound = None  # type: ignore
 
-from .acm import build_acm_summary
 from .ec2 import group_instances_by_subnet
-from .ecs import build_ecs_summary
-from .eks import build_eks_summary
-from .iam import build_iam_summary
-from .kms import build_kms_summary
 from .models import (
     DiagramContext,
     Ec2Resources,
@@ -31,10 +26,8 @@ from .models import (
     InstanceSummary,
     SubnetCell,
 )
-from .route53 import build_route53_summary
 from .rds import group_rds_instances_by_vpc
-from .s3 import build_s3_summary
-from .ssm import build_ssm_summary
+from .registry import build_global_service_summaries
 from .vpc import (
     build_route_table_indexes,
     build_subnet_cell,
@@ -144,31 +137,6 @@ def _collect_rds_instances(session: boto3.session.Session) -> List[dict]:
         return []
 
 
-def _build_global_services(
-    session: boto3.session.Session, max_items: int
-) -> List[GlobalServiceSummary]:
-    service_builders = (
-        build_kms_summary,
-        build_s3_summary,
-        build_acm_summary,
-        build_route53_summary,
-        build_iam_summary,
-        build_ssm_summary,
-        build_eks_summary,
-        build_ecs_summary,
-    )
-
-    services: List[GlobalServiceSummary] = []
-    for builder in service_builders:
-        try:
-            summary = builder(session, max_items)
-        except (ClientError, EndpointConnectionError):
-            summary = None
-        if summary:
-            services.append(summary)
-    return services
-
-
 def _prepare_context(
     resources: Ec2Resources, db_instances: List[dict]
 ) -> DiagramContext:
@@ -272,7 +240,7 @@ def generate_network_diagram(session: boto3.session.Session, output_path: str) -
     graph = _create_graph()
     resources = _collect_ec2_resources(session)
     db_instances = _collect_rds_instances(session)
-    global_services = _build_global_services(session, max_items=8)
+    global_services = build_global_service_summaries(session, max_items=8)
     has_global_services = bool(global_services)
 
     context = _prepare_context(resources, db_instances)
