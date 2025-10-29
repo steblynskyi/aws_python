@@ -7,8 +7,11 @@ import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
-from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from ..utils import batch_iterable, finding_from_exception, safe_paginate
+from . import ServiceReport, inventory_item_from_findings
+
+
+VOLUME_BATCH_SIZE = 200  # describe_volumes allows up to 500 IDs
 
 
 def audit_ec2_instances(session: boto3.session.Session) -> ServiceReport:
@@ -33,49 +36,35 @@ def audit_ec2_instances(session: boto3.session.Session) -> ServiceReport:
                             message="Instance is not associated with an IAM instance profile.",
                         )
                     )
+
+                volume_ids = []
                 for mapping in instance.get("BlockDeviceMappings", []):
                     ebs = mapping.get("Ebs")
                     if not ebs:
                         continue
-                    volume_id = ebs["VolumeId"]
-                    if volume_id not in volume_cache:
-                        try:
-                            volume = ec2.describe_volumes(VolumeIds=[volume_id])["Volumes"][0]
-                            volume_cache[volume_id] = volume.get("Encrypted", False)
-                        except (ClientError, EndpointConnectionError) as exc:
+                    volume_id = ebs.get("VolumeId")
+                    if volume_id:
+                        volume_ids.append(volume_id)
+
+                unique_volume_ids = list(dict.fromkeys(volume_ids))
+                if unique_volume_ids:
+                    _ensure_volume_details(
+                        ec2, unique_volume_ids, volume_cache, instance_findings
+                    )
+                    for volume_id in unique_volume_ids:
+                        if not volume_cache.get(volume_id, True):
                             instance_findings.append(
-                                finding_from_exception(
-                                    "EC2",
-                                    "Failed to describe EBS volume",
-                                    exc,
-                                    resource_id=volume_id,
+                                Finding(
+                                    service="EC2",
+                                    resource_id=f"{instance_id}:{volume_id}",
+                                    severity="HIGH",
+                                    message="EBS volume is not encrypted.",
                                 )
                             )
-                            volume_cache[volume_id] = True
-                            continue
-                    if not volume_cache[volume_id]:
-                        instance_findings.append(
-                            Finding(
-                                service="EC2",
-                                resource_id=f"{instance_id}:{volume_id}",
-                                severity="HIGH",
-                                message="EBS volume is not encrypted.",
-                            )
-                        )
+
                 findings.extend(instance_findings)
-                if instance_findings:
-                    details = "; ".join(f.message for f in instance_findings)
-                    status = "NON_COMPLIANT"
-                else:
-                    details = "All checks passed."
-                    status = "COMPLIANT"
                 inventory.append(
-                    InventoryItem(
-                        service="EC2",
-                        resource_id=instance_id,
-                        status=status,
-                        details=details,
-                    )
+                    inventory_item_from_findings("EC2", instance_id, instance_findings)
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
@@ -90,6 +79,48 @@ def audit_ec2_instances(session: boto3.session.Session) -> ServiceReport:
             )
         )
     return ServiceReport(findings=findings, inventory=inventory)
+
+
+def _ensure_volume_details(
+    ec2: boto3.client,
+    volume_ids: List[str],
+    volume_cache: Dict[str, bool],
+    instance_findings: List[Finding],
+) -> None:
+    """Populate ``volume_cache`` with encryption status for ``volume_ids``."""
+
+    missing_ids = [volume_id for volume_id in volume_ids if volume_id not in volume_cache]
+    if not missing_ids:
+        return
+
+    for batch in batch_iterable(missing_ids, VOLUME_BATCH_SIZE):
+        try:
+            response = ec2.describe_volumes(VolumeIds=list(batch))
+        except (ClientError, EndpointConnectionError) as exc:
+            for volume_id in batch:
+                instance_findings.append(
+                    finding_from_exception(
+                        "EC2",
+                        "Failed to describe EBS volume",
+                        exc,
+                        resource_id=volume_id,
+                    )
+                )
+                volume_cache[volume_id] = True
+            continue
+
+        volumes = response.get("Volumes", [])
+        retrieved_ids = set()
+        for volume in volumes:
+            volume_id = volume.get("VolumeId")
+            if not volume_id:
+                continue
+            retrieved_ids.add(volume_id)
+            volume_cache[volume_id] = volume.get("Encrypted", False)
+
+        for volume_id in batch:
+            if volume_id not in retrieved_ids:
+                volume_cache.setdefault(volume_id, True)
 
 
 __all__ = ["audit_ec2_instances"]

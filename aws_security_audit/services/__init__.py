@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List
+from typing import Callable, Dict, Iterable, List
 
 import boto3
 
@@ -17,6 +17,31 @@ class ServiceReport:
 
 
 ServiceChecker = Callable[[boto3.session.Session], ServiceReport]
+
+
+def inventory_item_from_findings(
+    service: str,
+    resource_id: str,
+    resource_findings: Iterable[Finding],
+    *,
+    compliant_details: str = "All checks passed.",
+) -> InventoryItem:
+    """Build an :class:`InventoryItem` summarising ``resource_findings``."""
+
+    messages = [finding.message for finding in resource_findings]
+    if messages:
+        return InventoryItem(
+            service=service,
+            resource_id=resource_id,
+            status="NON_COMPLIANT",
+            details="; ".join(messages),
+        )
+    return InventoryItem(
+        service=service,
+        resource_id=resource_id,
+        status="COMPLIANT",
+        details=compliant_details,
+    )
 
 from .acm import audit_acm_certificates
 from .ec2 import audit_ec2_instances
@@ -44,4 +69,9 @@ SERVICE_CHECKS: Dict[str, ServiceChecker] = {
     "ecs": audit_ecs_clusters,
 }
 
-__all__ = ["SERVICE_CHECKS", "ServiceChecker", "ServiceReport"]
+__all__ = [
+    "SERVICE_CHECKS",
+    "ServiceChecker",
+    "ServiceReport",
+    "inventory_item_from_findings",
+]

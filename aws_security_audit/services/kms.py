@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_kms_keys(session: boto3.session.Session) -> ServiceReport:
@@ -110,19 +110,8 @@ def audit_kms_keys(session: boto3.session.Session) -> ServiceReport:
             key_findings.extend(_check_rotation(kms, key_id, resource_id))
 
         findings.extend(key_findings)
-        if key_findings:
-            details = "; ".join(f.message for f in key_findings)
-            status = "NON_COMPLIANT"
-        else:
-            details = "All checks passed."
-            status = "COMPLIANT"
         inventory.append(
-            InventoryItem(
-                service="KMS",
-                resource_id=resource_id,
-                status=status,
-                details=details,
-            )
+            inventory_item_from_findings("KMS", resource_id, key_findings)
         )
 
     return ServiceReport(findings=findings, inventory=inventory)

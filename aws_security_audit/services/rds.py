@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_rds_instances(session: boto3.session.Session) -> ServiceReport:
@@ -40,19 +40,8 @@ def audit_rds_instances(session: boto3.session.Session) -> ServiceReport:
                     )
                 )
             findings.extend(db_findings)
-            if db_findings:
-                details = "; ".join(f.message for f in db_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="RDS",
-                    resource_id=db_id,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("RDS", db_id, db_findings)
             )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(

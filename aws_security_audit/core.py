@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 
 import boto3
 
@@ -85,67 +85,69 @@ def print_findings(findings: Iterable[Finding]) -> None:
 
 
 def export_findings_to_excel(findings: Iterable[Finding], path: str) -> str:
-    """Write *findings* to an Excel workbook located at *path*.
+    """Write *findings* to an Excel workbook located at *path*."""
 
-    The function requires the optional :mod:`openpyxl` dependency. It returns the
-    path that was written so callers can surface it to users.
-    """
-
-    try:
-        from openpyxl import Workbook
-        from openpyxl.utils import get_column_letter
-    except ImportError as exc:  # pragma: no cover - dependency missing during tests
-        raise RuntimeError(
-            "The 'openpyxl' package is required to export findings to Excel. "
-            "Install it with 'pip install openpyxl'."
-        ) from exc
-
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Findings"
-
-    headers = ["Service", "Resource ID", "Severity", "Message"]
-    sheet.append(headers)
-    column_widths = [len(header) for header in headers]
-
-    for finding in findings:
-        row = [finding.service, finding.resource_id, finding.severity, finding.message]
-        sheet.append(row)
-        for idx, value in enumerate(row):
-            column_widths[idx] = max(column_widths[idx], len(str(value)))
-
-    for idx, width in enumerate(column_widths, start=1):
-        column_letter = get_column_letter(idx)
-        sheet.column_dimensions[column_letter].width = min(width + 2, 60)
-
-    workbook.save(path)
-    return path
+    headers = ("Service", "Resource ID", "Severity", "Message")
+    rows = (
+        (finding.service, finding.resource_id, finding.severity, finding.message)
+        for finding in findings
+    )
+    return _export_rows_to_excel(
+        rows,
+        headers,
+        path,
+        sheet_title="Findings",
+        purpose="findings",
+    )
 
 
 def export_inventory_to_excel(inventory: Iterable[InventoryItem], path: str) -> str:
     """Write *inventory* to an Excel workbook located at *path*."""
 
+    headers = ("Service", "Resource ID", "Status", "Details")
+    rows = (
+        (item.service, item.resource_id, item.status, item.details)
+        for item in inventory
+    )
+    return _export_rows_to_excel(
+        rows,
+        headers,
+        path,
+        sheet_title="Inventory",
+        purpose="inventory",
+    )
+
+
+def _export_rows_to_excel(
+    rows: Iterable[Sequence[object]],
+    headers: Sequence[str],
+    path: str,
+    *,
+    sheet_title: str,
+    purpose: str,
+) -> str:
+    """Write ``rows`` with ``headers`` to an Excel sheet using :mod:`openpyxl`."""
+
     try:
         from openpyxl import Workbook
         from openpyxl.utils import get_column_letter
     except ImportError as exc:  # pragma: no cover - dependency missing during tests
         raise RuntimeError(
-            "The 'openpyxl' package is required to export inventory to Excel. "
-            "Install it with 'pip install openpyxl'."
+            "The 'openpyxl' package is required to export "
+            f"{purpose} to Excel. Install it with 'pip install openpyxl'."
         ) from exc
 
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "Inventory"
+    sheet.title = sheet_title
 
-    headers = ["Service", "Resource ID", "Status", "Details"]
-    sheet.append(headers)
+    sheet.append(list(headers))
     column_widths = [len(header) for header in headers]
 
-    for item in inventory:
-        row = [item.service, item.resource_id, item.status, item.details]
-        sheet.append(row)
-        for idx, value in enumerate(row):
+    for row in rows:
+        values = list(row)
+        sheet.append(values)
+        for idx, value in enumerate(values):
             column_widths[idx] = max(column_widths[idx], len(str(value)))
 
     for idx, width in enumerate(column_widths, start=1):

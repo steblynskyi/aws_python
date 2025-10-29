@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_s3_buckets(session: boto3.session.Session) -> ServiceReport:
@@ -42,19 +42,8 @@ def audit_s3_buckets(session: boto3.session.Session) -> ServiceReport:
         bucket_findings.extend(_check_bucket_encryption(s3, name))
         findings.extend(bucket_findings)
 
-        if bucket_findings:
-            details = "; ".join(f.message for f in bucket_findings)
-            status = "NON_COMPLIANT"
-        else:
-            details = "All checks passed."
-            status = "COMPLIANT"
         inventory.append(
-            InventoryItem(
-                service="S3",
-                resource_id=name,
-                status=status,
-                details=details,
-            )
+            inventory_item_from_findings("S3", name, bucket_findings)
         )
     return ServiceReport(findings=findings, inventory=inventory)
 
