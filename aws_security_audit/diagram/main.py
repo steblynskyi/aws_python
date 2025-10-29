@@ -95,6 +95,12 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
                 ec2, "describe_vpc_peering_connections", "VpcPeeringConnections"
             )
         )
+        vpn_connections = list(
+            safe_paginate(ec2, "describe_vpn_connections", "VpnConnections")
+        )
+        customer_gateways = list(
+            safe_paginate(ec2, "describe_customer_gateways", "CustomerGateways")
+        )
         reservations = list(
             safe_paginate(
                 ec2,
@@ -125,6 +131,8 @@ def _collect_ec2_resources(session: boto3.session.Session) -> Ec2Resources:
         internet_gateways=internet_gateways,
         vpc_endpoints=vpc_endpoints,
         vpc_peering_connections=vpc_peering_connections,
+        vpn_connections=vpn_connections,
+        customer_gateways=customer_gateways,
         reservations=reservations,
     )
 
@@ -164,6 +172,18 @@ def _prepare_context(
         if connection.get("VpcPeeringConnectionId")
     }
 
+    vpn_connections_by_vgw: Dict[str, List[dict]] = {}
+    for connection in resources.vpn_connections:
+        vgw_id = connection.get("VpnGatewayId")
+        if vgw_id:
+            vpn_connections_by_vgw.setdefault(vgw_id, []).append(connection)
+
+    customer_gateways = {
+        gateway.get("CustomerGatewayId", ""): gateway
+        for gateway in resources.customer_gateways
+        if gateway.get("CustomerGatewayId")
+    }
+
     return DiagramContext(
         resources=resources,
         subnets_by_vpc=subnets_by_vpc,
@@ -175,6 +195,8 @@ def _prepare_context(
         internet_gateways=internet_gateways,
         vpc_endpoints_by_vpc=vpc_endpoints_by_vpc,
         vpc_peering_connections=vpc_peering_connections,
+        vpn_connections_by_vgw=vpn_connections_by_vgw,
+        customer_gateways=customer_gateways,
     )
 
 
@@ -484,6 +506,55 @@ def _render_vpc_cluster(
                             body_color="#1a365d",
                             border_color="#2c5282",
                         )
+                    elif node_type == "virtual_private_gateway":
+                        def _build_virtual_private_gateway_label(gateway_id: str) -> str:
+                            lines: List[str] = [f"Gateway ID: {gateway_id}"]
+
+                            connections = context.vpn_connections_by_vgw.get(gateway_id, [])
+                            for index, connection in enumerate(connections):
+                                if index:
+                                    lines.append(" ")
+
+                                vpn_id = connection.get("VpnConnectionId", "unknown")
+                                vpn_name = next(
+                                    (
+                                        tag.get("Value")
+                                        for tag in connection.get("Tags", [])
+                                        if tag.get("Key") == "Name" and tag.get("Value")
+                                    ),
+                                    None,
+                                )
+                                customer_gateway_id = connection.get("CustomerGatewayId") or ""
+                                customer_gateway = context.customer_gateways.get(
+                                    customer_gateway_id, {}
+                                )
+                                customer_address = (
+                                    customer_gateway.get("IpAddress")
+                                    or customer_gateway_id
+                                    or "unknown"
+                                )
+
+                                if vpn_name:
+                                    lines.append(f"Name: {vpn_name}")
+                                else:
+                                    lines.append("Name: (untagged)")
+                                lines.append(f"VPN ID: {vpn_id}")
+                                lines.append(f"Customer gateway: {customer_address}")
+
+                            if len(lines) == 1:
+                                lines.append("No Site-to-Site VPN connections found")
+
+                            return build_icon_label(
+                                "Virtual Private Gateway",
+                                lines,
+                                icon_text="VGW",
+                                icon_bgcolor="#2c5282",
+                                body_bgcolor="#edf2f7",
+                                body_color="#1a365d",
+                                border_color="#2c5282",
+                            )
+
+                        label = _build_virtual_private_gateway_label(node_id)
                     else:
                         label_map = {
                             "egress_only_internet_gateway": build_icon_label(
@@ -501,15 +572,6 @@ def _render_vpc_cluster(
                                 icon_text="TGW",
                                 icon_bgcolor="#2c5282",
                                 body_bgcolor="#ebf8ff",
-                                body_color="#1a365d",
-                                border_color="#2c5282",
-                            ),
-                            "virtual_private_gateway": build_icon_label(
-                                node_id,
-                                ["Virtual Private Gateway"],
-                                icon_text="VGW",
-                                icon_bgcolor="#2c5282",
-                                body_bgcolor="#edf2f7",
                                 body_color="#1a365d",
                                 border_color="#2c5282",
                             ),
