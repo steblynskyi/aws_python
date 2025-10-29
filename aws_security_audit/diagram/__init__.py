@@ -23,4 +23,17 @@ except ModuleNotFoundError as exc:  # pragma: no cover - triggered when optional
     else:
         raise
 
-__all__ = ["generate_network_diagram"]
+from .registry import (
+    GLOBAL_SERVICE_BUILDERS,
+    GlobalServiceBuilder,
+    build_global_service_summaries,
+    iter_global_service_summaries,
+)
+
+__all__ = [
+    "generate_network_diagram",
+    "GLOBAL_SERVICE_BUILDERS",
+    "GlobalServiceBuilder",
+    "build_global_service_summaries",
+    "iter_global_service_summaries",
+]
