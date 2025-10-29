@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .html_utils import build_icon_label, escape_label
 
@@ -229,7 +229,7 @@ def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
     return cidrs
 
 
-def _format_vpc_peering_lines(connection: dict) -> List[str]:
+def _format_vpc_peering_label(connection_id: str, connection: dict) -> Tuple[str, List[str]]:
     requester = connection.get("RequesterVpcInfo", {}) or {}
     accepter = connection.get("AccepterVpcInfo", {}) or {}
 
@@ -239,15 +239,28 @@ def _format_vpc_peering_lines(connection: dict) -> List[str]:
     requester_cidrs = _collect_vpc_cidrs(requester)
     accepter_cidrs = _collect_vpc_cidrs(accepter)
 
-    lines = [f"Requester: {requester_vpc}"]
+    name = next(
+        (
+            tag.get("Value")
+            for tag in connection.get("Tags", [])
+            if tag.get("Key") == "Name" and tag.get("Value")
+        ),
+        None,
+    )
+
+    title_name = name or connection_id
+    title = f"VPC Peering: {title_name}"
+
+    lines = [f"Peering Connection ID: {connection_id}"]
+    lines.append(f"Requester VPC: {requester_vpc}")
     if requester_cidrs:
         lines.append(f"Requester CIDRs: {', '.join(requester_cidrs)}")
 
-    lines.append(f"Accepter: {accepter_vpc}")
+    lines.append(f"Accepter VPC: {accepter_vpc}")
     if accepter_cidrs:
         lines.append(f"Accepter CIDRs: {', '.join(accepter_cidrs)}")
 
-    return lines
+    return title, lines
 
 
 def generate_network_diagram(session: boto3.session.Session, output_path: str) -> Optional[str]:
@@ -488,11 +501,13 @@ def _render_vpc_cluster(
                     label = None
                     if node_type == "vpc_peering_connection":
                         connection = context.vpc_peering_connections.get(node_id, {})
-                        lines = _format_vpc_peering_lines(connection) if connection else [
-                            "VPC Peering"
-                        ]
+                        if connection:
+                            title, lines = _format_vpc_peering_label(node_id, connection)
+                        else:
+                            title = f"VPC Peering: {node_id}"
+                            lines = [f"Peering Connection ID: {node_id}"]
                         label = build_icon_label(
-                            node_id,
+                            title,
                             lines,
                             icon_text="PCX",
                             icon_bgcolor="#2c5282",
