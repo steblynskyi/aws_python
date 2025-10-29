@@ -99,6 +99,7 @@ class Ec2Resources:
     route_tables: List[dict]
     nat_gateways: List[dict]
     internet_gateways: List[dict]
+    virtual_private_gateways: List[dict]
     vpc_endpoints: List[dict]
     vpc_peering_connections: List[dict]
     reservations: List[dict]
@@ -116,6 +117,7 @@ class DiagramContext:
     instances_by_subnet: Dict[str, List[InstanceSummary]]
     rds_instances_by_vpc: Dict[str, List[dict]]
     internet_gateways: Dict[str, dict]
+    virtual_private_gateways: Dict[str, dict]
     vpc_endpoints_by_vpc: Dict[str, List[dict]]
     vpc_peering_connections: Dict[str, dict]
 
