@@ -20,6 +20,8 @@ except Exception:  # pragma: no cover - library is optional
 
 from .acm import build_acm_summary
 from .ec2 import group_instances_by_subnet
+from .ecs import build_ecs_summary
+from .eks import build_eks_summary
 from .iam import build_iam_summary
 from .kms import build_kms_summary
 from .models import (
@@ -32,6 +34,7 @@ from .models import (
 from .route53 import build_route53_summary
 from .rds import group_rds_instances_by_vpc
 from .s3 import build_s3_summary
+from .ssm import build_ssm_summary
 from .vpc import (
     build_route_table_indexes,
     build_subnet_cell,
@@ -144,6 +147,9 @@ def _build_global_services(
         build_acm_summary,
         build_route53_summary,
         build_iam_summary,
+        build_ssm_summary,
+        build_eks_summary,
+        build_ecs_summary,
     )
 
     services: List[GlobalServiceSummary] = []
