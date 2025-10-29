@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_route53_zones(session: boto3.session.Session) -> ServiceReport:
@@ -43,7 +43,7 @@ def audit_route53_zones(session: boto3.session.Session) -> ServiceReport:
                             message="DNSSEC is not configured for public hosted zone.",
                         )
                     )
-            except ClientError as exc:
+            except (ClientError, EndpointConnectionError) as exc:
                 zone_findings.append(
                     Finding(
                         service="Route53",
@@ -63,19 +63,8 @@ def audit_route53_zones(session: boto3.session.Session) -> ServiceReport:
                 findings.extend(zone_findings)
                 continue
             findings.extend(zone_findings)
-            if zone_findings:
-                details = "; ".join(f.message for f in zone_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="Route53",
-                    resource_id=zone_id,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("Route53", zone_id, zone_findings)
             )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(

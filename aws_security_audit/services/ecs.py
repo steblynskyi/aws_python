@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import batch_iterable, finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_ecs_clusters(session: boto3.session.Session) -> ServiceReport:
@@ -24,7 +24,7 @@ def audit_ecs_clusters(session: boto3.session.Session) -> ServiceReport:
                 continue
             try:
                 response = ecs.describe_clusters(clusters=list(batch), include=["SETTINGS", "CONFIGURATIONS"])
-            except ClientError as exc:
+            except (ClientError, EndpointConnectionError) as exc:
                 for arn in batch:
                     findings.append(
                         finding_from_exception(
@@ -66,19 +66,8 @@ def audit_ecs_clusters(session: boto3.session.Session) -> ServiceReport:
                         )
                     )
                 findings.extend(cluster_findings)
-                if cluster_findings:
-                    details = "; ".join(f.message for f in cluster_findings)
-                    status = "NON_COMPLIANT"
-                else:
-                    details = "All checks passed."
-                    status = "COMPLIANT"
                 inventory.append(
-                    InventoryItem(
-                        service="ECS",
-                        resource_id=arn,
-                        status=status,
-                        details=details,
-                    )
+                    inventory_item_from_findings("ECS", arn, cluster_findings)
                 )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(

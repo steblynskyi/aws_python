@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_iam_users(session: boto3.session.Session) -> ServiceReport:
@@ -24,8 +24,27 @@ def audit_iam_users(session: boto3.session.Session) -> ServiceReport:
             user_name = user["UserName"]
             user_findings: List[Finding] = []
             key_inventory: List[InventoryItem] = []
-            mfas = iam.list_mfa_devices(UserName=user_name).get("MFADevices", [])
-            if not mfas:
+            try:
+                mfas = list(
+                    safe_paginate(
+                        iam,
+                        "list_mfa_devices",
+                        "MFADevices",
+                        UserName=user_name,
+                    )
+                )
+            except (ClientError, EndpointConnectionError) as exc:
+                user_findings.append(
+                    finding_from_exception(
+                        "IAM",
+                        "Failed to list MFA devices",
+                        exc,
+                        resource_id=user_name,
+                        severity="WARNING",
+                    )
+                )
+                mfas = None
+            if mfas is not None and not mfas:
                 user_findings.append(
                     Finding(
                         service="IAM",
@@ -34,48 +53,59 @@ def audit_iam_users(session: boto3.session.Session) -> ServiceReport:
                         message="IAM user does not have MFA enabled.",
                     )
                 )
-            for key in iam.list_access_keys(UserName=user_name).get("AccessKeyMetadata", []):
+            try:
+                access_keys = list(
+                    safe_paginate(
+                        iam,
+                        "list_access_keys",
+                        "AccessKeyMetadata",
+                        UserName=user_name,
+                    )
+                )
+            except (ClientError, EndpointConnectionError) as exc:
+                user_findings.append(
+                    finding_from_exception(
+                        "IAM",
+                        "Failed to list access keys",
+                        exc,
+                        resource_id=user_name,
+                        severity="WARNING",
+                    )
+                )
+                access_keys = []
+            for key in access_keys:
                 create_date = key["CreateDate"]
+                resource_id = f"{user_name}:{key['AccessKeyId']}"
                 if now - create_date > timedelta(days=90):
+                    message = "Access key is older than 90 days."
                     user_findings.append(
                         Finding(
                             service="IAM",
-                            resource_id=f"{user_name}:{key['AccessKeyId']}",
+                            resource_id=resource_id,
                             severity="MEDIUM",
-                            message="Access key is older than 90 days.",
+                            message=message,
                         )
                     )
                     key_inventory.append(
                         InventoryItem(
                             service="IAM",
-                            resource_id=f"{user_name}:{key['AccessKeyId']}",
+                            resource_id=resource_id,
                             status="NON_COMPLIANT",
-                            details="Access key is older than 90 days.",
+                            details=message,
                         )
                     )
                 else:
                     key_inventory.append(
                         InventoryItem(
                             service="IAM",
-                            resource_id=f"{user_name}:{key['AccessKeyId']}",
+                            resource_id=resource_id,
                             status="COMPLIANT",
                             details="Access key rotation within 90 days.",
                         )
                     )
             findings.extend(user_findings)
-            if user_findings:
-                details = "; ".join(f.message for f in user_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="IAM",
-                    resource_id=user_name,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("IAM", user_name, user_findings)
             )
             inventory.extend(key_inventory)
     except (ClientError, EndpointConnectionError) as exc:

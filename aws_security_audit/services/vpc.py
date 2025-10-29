@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_vpcs(session: boto3.session.Session) -> ServiceReport:
@@ -54,19 +54,8 @@ def _audit_security_groups(ec2: BaseClient) -> Tuple[List[Finding], List[Invento
                     _build_open_security_group_findings(group_id, permission, inbound=False)
                 )
             findings.extend(group_findings)
-            if group_findings:
-                details = "; ".join(f.message for f in group_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="VPC",
-                    resource_id=group_id,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("VPC", group_id, group_findings)
             )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
@@ -149,19 +138,8 @@ def _audit_network_acls(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryI
                     )
                 )
             findings.extend(acl_findings)
-            if acl_findings:
-                details = "; ".join(f.message for f in acl_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="VPC",
-                    resource_id=acl_id,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("VPC", acl_id, acl_findings)
             )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
@@ -186,9 +164,10 @@ def _audit_vpc_peering(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryIt
             ec2, "describe_vpc_peering_connections", "VpcPeeringConnections"
         ):
             status = connection.get("Status", {}).get("Code")
+            conn_id = connection.get("VpcPeeringConnectionId", "unknown")
+            conn_findings: List[Finding] = []
             if status and status != "active":
-                conn_id = connection.get("VpcPeeringConnectionId", "unknown")
-                findings.append(
+                conn_findings.append(
                     Finding(
                         service="VPC",
                         resource_id=conn_id,
@@ -196,24 +175,16 @@ def _audit_vpc_peering(ec2: BaseClient) -> Tuple[List[Finding], List[InventoryIt
                         message=f"VPC peering connection not active (status={status}).",
                     )
                 )
-                inventory.append(
-                    InventoryItem(
-                        service="VPC",
-                        resource_id=conn_id,
-                        status="NON_COMPLIANT",
-                        details=f"Connection status is {status}.",
-                    )
+            if conn_findings:
+                findings.extend(conn_findings)
+            inventory.append(
+                inventory_item_from_findings(
+                    "VPC",
+                    conn_id,
+                    conn_findings,
+                    compliant_details="Peering connection is active.",
                 )
-            else:
-                conn_id = connection.get("VpcPeeringConnectionId", "unknown")
-                inventory.append(
-                    InventoryItem(
-                        service="VPC",
-                        resource_id=conn_id,
-                        status="COMPLIANT",
-                        details="Peering connection is active.",
-                    )
-                )
+            )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
             finding_from_exception(
@@ -264,18 +235,12 @@ def _audit_vpn_connections(ec2: BaseClient) -> Tuple[List[Finding], List[Invento
                         )
                     )
             findings.extend(vpn_findings)
-            if vpn_findings:
-                details = "; ".join(f.message for f in vpn_findings)
-                status_label = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status_label = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="VPC",
-                    resource_id=vpn_id,
-                    status=status_label,
-                    details=details,
+                inventory_item_from_findings(
+                    "VPC",
+                    vpn_id,
+                    vpn_findings,
+                    compliant_details="VPN connection is available.",
                 )
             )
     except (ClientError, EndpointConnectionError) as exc:

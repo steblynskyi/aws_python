@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport
+from . import ServiceReport, inventory_item_from_findings
 
 
 def audit_eks_clusters(session: boto3.session.Session) -> ServiceReport:
@@ -22,7 +22,7 @@ def audit_eks_clusters(session: boto3.session.Session) -> ServiceReport:
         for name in clusters:
             try:
                 cluster = eks.describe_cluster(name=name)["cluster"]
-            except ClientError as exc:
+            except (ClientError, EndpointConnectionError) as exc:
                 finding = finding_from_exception(
                     "EKS",
                     "Failed to describe cluster",
@@ -71,19 +71,8 @@ def audit_eks_clusters(session: boto3.session.Session) -> ServiceReport:
                     )
                 )
             findings.extend(cluster_findings)
-            if cluster_findings:
-                details = "; ".join(f.message for f in cluster_findings)
-                status = "NON_COMPLIANT"
-            else:
-                details = "All checks passed."
-                status = "COMPLIANT"
             inventory.append(
-                InventoryItem(
-                    service="EKS",
-                    resource_id=name,
-                    status=status,
-                    details=details,
-                )
+                inventory_item_from_findings("EKS", name, cluster_findings)
             )
     except (ClientError, EndpointConnectionError) as exc:
         findings.append(
