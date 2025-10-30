@@ -1,8 +1,10 @@
 """VPC-related helpers for network diagram generation."""
 from __future__ import annotations
 
-from .html_utils import escape_label
+from textwrap import wrap
 from typing import Dict, Iterable, List, Optional, Tuple
+
+from .html_utils import escape_label
 
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
 
@@ -248,6 +250,56 @@ def build_subnet_cell(
     )
 
 
+def wrap_label_text(value: str, width: int = 26) -> List[str]:
+    """Return the label split into shorter lines for improved readability."""
+
+    if not value:
+        return []
+
+    def _split_with_delimiter(text: str, delimiter: str) -> List[str]:
+        parts = text.split(delimiter)
+        lines: List[str] = []
+        current = ""
+
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            candidate = f"{current}{delimiter}{part}" if current else part
+            if len(candidate) <= width or not current:
+                current = candidate
+            else:
+                lines.append(current)
+                current = part
+
+        if current:
+            lines.append(current)
+
+        return lines or [text]
+
+    lines = _split_with_delimiter(value, "-")
+    refined: List[str] = []
+
+    for line in lines:
+        working_line = line
+        if len(working_line) > width and "_" in working_line:
+            refined.extend(_split_with_delimiter(working_line, "_"))
+            continue
+
+        if len(working_line) > width and " " in working_line:
+            refined.extend(wrap(working_line, width=width, break_long_words=False, break_on_hyphens=False))
+            continue
+
+        if len(working_line) > width:
+            refined.extend(wrap(working_line, width=width, break_long_words=False, break_on_hyphens=False) or [working_line])
+            continue
+
+        refined.append(working_line)
+
+    return refined or [value]
+
+
 def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
 
@@ -264,7 +316,8 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
 
     subnet_lines = []
     if cell.name:
-        subnet_lines.append(f"<B>{escape_label(cell.name)}</B>")
+        for line in wrap_label_text(cell.name):
+            subnet_lines.append(f"<B>{escape_label(line)}</B>")
     subnet_lines.append(f'<FONT POINT-SIZE="11">{escape_label(cell.subnet_id)}</FONT>')
     if cell.cidr:
         subnet_lines.append(escape_label(cell.cidr))
@@ -281,8 +334,12 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     if cell.route_summary:
         route_lines = []
         if cell.route_summary.name:
-            route_lines.append(f'<FONT POINT-SIZE="11"><B>{escape_label(cell.route_summary.name)}</B></FONT>')
-        route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(cell.route_summary.route_table_id)}</FONT>')
+            name_lines = wrap_label_text(cell.route_summary.name, width=30)
+            for line in name_lines:
+                route_lines.append(f'<FONT POINT-SIZE="11"><B>{escape_label(line)}</B></FONT>')
+        route_table_lines = wrap_label_text(cell.route_summary.route_table_id, width=30)
+        for line in route_table_lines:
+            route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(line)}</FONT>')
         if cell.route_summary.routes:
             for route in cell.route_summary.routes:
                 route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(route.display_text())}</FONT>')
