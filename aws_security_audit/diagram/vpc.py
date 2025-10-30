@@ -341,8 +341,12 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         for line in route_table_lines:
             route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(line)}</FONT>')
         if cell.route_summary.routes:
-            for route in cell.route_summary.routes:
-                route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(route.display_text())}</FONT>')
+            for index, route in enumerate(cell.route_summary.routes):
+                route_lines.append(
+                    f'<FONT POINT-SIZE="10">{escape_label(route.display_text())}</FONT>'
+                )
+                if index != len(cell.route_summary.routes) - 1:
+                    route_lines.append('<FONT POINT-SIZE="3">&nbsp;</FONT>')
         else:
             route_lines.append('<FONT POINT-SIZE="11">No non-local routes</FONT>')
         route_html = '<BR ALIGN="LEFT"/>'.join(route_lines)
