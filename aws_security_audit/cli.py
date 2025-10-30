@@ -12,13 +12,11 @@ import boto3
 from .compliance import COMPLIANCE_SERVICE_MAP, expand_compliance_frameworks
 from .core import (
     collect_audit_results,
-    collect_findings,
     export_findings_to_excel,
     export_inventory_to_excel,
     print_findings,
 )
 from .diagram import generate_network_diagram
-from .services import SERVICE_CHECKS
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -31,7 +29,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--services",
         nargs="*",
         default=None,
-        help="Subset of services to audit (default: all)",
+        help="Subset of services to audit (required unless --compliance is provided)",
     )
     parser.add_argument(
         "--compliance",
@@ -65,7 +63,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     session = boto3.Session(profile_name=args.profile, region_name=args.region)
 
-    selected_services = args.services if args.services else list(SERVICE_CHECKS)
+    selected_services = list(args.services) if args.services else []
     if args.compliance:
         try:
             compliance_services = expand_compliance_frameworks(args.compliance)
@@ -100,6 +98,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             selected_services = filtered_services
         else:
             selected_services = sorted(compliance_services)
+
+    if not selected_services:
+        print(
+            "Error: No services selected. Specify services with --services or choose a "
+            "compliance framework with --compliance.",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         results = collect_audit_results(session, selected_services)
