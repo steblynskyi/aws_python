@@ -27,7 +27,7 @@ from .models import (
     SubnetCell,
 )
 from .rds import group_rds_instances_by_vpc
-from .registry import build_global_service_summaries
+from .registry import GLOBAL_SERVICE_BUILDERS, build_global_service_summaries
 from .vpc import (
     build_route_table_indexes,
     build_subnet_cell,
@@ -254,22 +254,53 @@ def _format_vpc_peering_label(connection_id: str, connection: dict) -> Tuple[str
     return title, lines
 
 
-def generate_network_diagram(session: boto3.session.Session, output_path: str) -> Optional[str]:
+def generate_network_diagram(
+    session: boto3.session.Session,
+    output_path: str,
+    services: Optional[List[str]] = None,
+) -> Optional[str]:
     """Render a VPC-centric network diagram if ``graphviz`` is available."""
 
     if Digraph is None:
         return None
 
-    graph = _create_graph()
-    resources = _collect_ec2_resources(session)
-    db_instances = _collect_rds_instances(session)
-    global_services = build_global_service_summaries(session, max_items=8)
+    requested_services: Optional[Set[str]] = None
+    if services is not None:
+        requested_services = {service.lower() for service in services}
+
+    include_network = (
+        requested_services is None
+        or bool(requested_services & {"ec2", "vpc", "rds"})
+    )
+
+    builders = GLOBAL_SERVICE_BUILDERS
+    if requested_services is not None:
+        builders = {
+            name: builder
+            for name, builder in GLOBAL_SERVICE_BUILDERS.items()
+            if name in requested_services
+        }
+
+    global_services = build_global_service_summaries(
+        session, max_items=8, builders=builders
+    )
     has_global_services = bool(global_services)
 
-    context = _prepare_context(resources, db_instances)
+    if not include_network and not has_global_services:
+        raise RuntimeError(
+            "Unable to generate diagram: none of the requested services provide "
+            "diagram data."
+        )
 
-    for vpc in resources.vpcs:
-        _render_vpc_cluster(graph, vpc, context, has_global_services)
+    graph = _create_graph()
+
+    if include_network:
+        resources = _collect_ec2_resources(session)
+        db_instances = _collect_rds_instances(session)
+        context = _prepare_context(resources, db_instances)
+
+        for vpc in resources.vpcs:
+            _render_vpc_cluster(graph, vpc, context, has_global_services)
 
     if has_global_services:
         _render_global_services_cluster(graph, global_services)
