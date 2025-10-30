@@ -139,7 +139,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.diagram_path:
         try:
-            path = generate_network_diagram(session, args.diagram_path)
+            path = generate_network_diagram(
+                session, args.diagram_path, services=selected_services
+            )
             if path:
                 print(f"Network diagram written to {path}")
             else:
