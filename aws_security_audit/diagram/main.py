@@ -45,6 +45,7 @@ from .vpc import (
     format_vpc_peering_connection_label,
     format_virtual_private_gateway_label,
     INTERNET_GATEWAY_PANEL_COLORS,
+    NAT_GATEWAY_PANEL_COLORS,
     PEERING_PANEL_COLORS,
     VPC_PANEL_COLORS,
     group_subnets_by_vpc,
@@ -424,7 +425,7 @@ def _render_vpc_cluster(
                 ),
                 None,
             )
-            palette = PEERING_PANEL_COLORS
+            palette = NAT_GATEWAY_PANEL_COLORS
             wrap32 = partial(wrap_label_text, width=32)
             panel_rows: List[str] = []
 
