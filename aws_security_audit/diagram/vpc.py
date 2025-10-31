@@ -24,13 +24,13 @@ class PanelColors:
 
 
 PEERING_PANEL_COLORS = PanelColors(
-    header_bg="#6b21a8",
+    header_bg="#1e3a8a",
     header_color="#ffffff",
-    info_bg="#f3e8ff",
-    info_text="#581c87",
-    meta_bg="#e9d5ff",
-    meta_text="#5b21b6",
-    section_bg="#ddd6fe",
+    info_bg="#eff6ff",
+    info_text="#1e3a8a",
+    meta_bg="#dbeafe",
+    meta_text="#1e3a8a",
+    section_bg="#bfdbfe",
 )
 
 
