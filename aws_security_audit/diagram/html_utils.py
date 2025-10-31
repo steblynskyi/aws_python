@@ -66,7 +66,10 @@ def format_vertical_label(lines: Iterable[str], *, bold_first: bool = False, ali
             content = f"<B>{content}</B>"
         rows.append(f'<TR><TD ALIGN="{align}">{content}</TD></TR>')
     body = "".join(rows) or '<TR><TD ALIGN="CENTER"></TD></TR>'
-    return f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">{body}</TABLE>>'
+    return (
+        '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">'
+        f"{body}</TABLE>>"
+    )
 
 
 def build_icon_cell(
