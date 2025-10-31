@@ -100,6 +100,17 @@ VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS = PanelColors(
 )
 
 
+PRIVATE_SUBNET_PANEL_COLORS = PanelColors(
+    header_bg="#dcfce7",
+    header_color="#14532d",
+    info_bg="#f0fdf4",
+    info_text="#166534",
+    meta_bg="#d1fae5",
+    meta_text="#166534",
+    section_bg="#bbf7d0",
+)
+
+
 def group_subnets_by_vpc(subnets: Iterable[dict]) -> Dict[str, List[dict]]:
     """Return mapping of VPC identifiers to their subnets."""
 
@@ -305,8 +316,14 @@ def build_subnet_cell(
 
     color_map = {
         "public": ("#ccebd4", "#1f3f2e"),
-        "private_app": ("#cfe3ff", "#1a365d"),
-        "private_data": ("#c0d7ff", "#102a56"),
+        "private_app": (
+            PRIVATE_SUBNET_PANEL_COLORS.header_bg,
+            PRIVATE_SUBNET_PANEL_COLORS.header_color,
+        ),
+        "private_data": (
+            PRIVATE_SUBNET_PANEL_COLORS.header_bg,
+            PRIVATE_SUBNET_PANEL_COLORS.header_color,
+        ),
         "shared": ("#e2e2e2", "#2d3748"),
     }
 
@@ -696,13 +713,23 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     def build_subnet_panel(cell: SubnetCell) -> str:
         """Return a styled HTML table describing subnet attributes."""
 
-        header_bg = cell.color
-        header_color = cell.font_color
-        border_color = cell.color
-        info_bg = "#f8fafc"
-        info_text = "#1a202c"
-        meta_bg = "#edf2f7"
-        meta_text = "#1a202c"
+        if cell.classification in {"private_app", "private_data"} and not cell.is_isolated:
+            palette = PRIVATE_SUBNET_PANEL_COLORS
+            header_bg = palette.header_bg
+            header_color = palette.header_color
+            border_color = palette.header_bg
+            info_bg = palette.info_bg
+            info_text = palette.info_text
+            meta_bg = palette.meta_bg
+            meta_text = palette.meta_text
+        else:
+            header_bg = cell.color
+            header_color = cell.font_color
+            border_color = cell.color
+            info_bg = "#f8fafc"
+            info_text = "#1a202c"
+            meta_bg = "#edf2f7"
+            meta_text = "#1a202c"
 
         rows = [
             (
@@ -847,5 +874,6 @@ __all__ = [
     "RDS_PANEL_COLORS",
     "INTERNET_GATEWAY_PANEL_COLORS",
     "VPC_PANEL_COLORS",
+    "PRIVATE_SUBNET_PANEL_COLORS",
     "wrap_label_text",
 ]
