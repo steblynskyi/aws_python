@@ -100,6 +100,17 @@ VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS = PanelColors(
 )
 
 
+PUBLIC_SUBNET_PANEL_COLORS = PanelColors(
+    header_bg="#d9f99d",
+    header_color="#365314",
+    info_bg="#f7fee7",
+    info_text="#3f6212",
+    meta_bg="#ecfccb",
+    meta_text="#3f6212",
+    section_bg="#bef264",
+)
+
+
 PRIVATE_SUBNET_PANEL_COLORS = PanelColors(
     header_bg="#dcfce7",
     header_color="#14532d",
@@ -315,7 +326,10 @@ def build_subnet_cell(
     """Return :class:`SubnetCell` representation for the subnet."""
 
     color_map = {
-        "public": ("#ccebd4", "#1f3f2e"),
+        "public": (
+            PUBLIC_SUBNET_PANEL_COLORS.header_bg,
+            PUBLIC_SUBNET_PANEL_COLORS.header_color,
+        ),
         "private_app": (
             PRIVATE_SUBNET_PANEL_COLORS.header_bg,
             PRIVATE_SUBNET_PANEL_COLORS.header_color,
@@ -713,7 +727,16 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     def build_subnet_panel(cell: SubnetCell) -> str:
         """Return a styled HTML table describing subnet attributes."""
 
-        if cell.classification in {"private_app", "private_data"} and not cell.is_isolated:
+        if cell.classification == "public":
+            palette = PUBLIC_SUBNET_PANEL_COLORS
+            header_bg = palette.header_bg
+            header_color = palette.header_color
+            border_color = palette.header_bg
+            info_bg = palette.info_bg
+            info_text = palette.info_text
+            meta_bg = palette.meta_bg
+            meta_text = palette.meta_text
+        elif cell.classification in {"private_app", "private_data"} and not cell.is_isolated:
             palette = PRIVATE_SUBNET_PANEL_COLORS
             header_bg = palette.header_bg
             header_color = palette.header_color
@@ -874,6 +897,7 @@ __all__ = [
     "RDS_PANEL_COLORS",
     "INTERNET_GATEWAY_PANEL_COLORS",
     "VPC_PANEL_COLORS",
+    "PUBLIC_SUBNET_PANEL_COLORS",
     "PRIVATE_SUBNET_PANEL_COLORS",
     "wrap_label_text",
 ]
