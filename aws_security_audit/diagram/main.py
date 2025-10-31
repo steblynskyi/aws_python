@@ -1,10 +1,16 @@
 """Network diagram generation utilities."""
 from __future__ import annotations
 
+from functools import partial
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Set
 
-from .html_utils import build_icon_cell, build_icon_label, build_panel_table, escape_label
+from .html_utils import (
+    build_icon_label,
+    build_icon_panel_label,
+    build_panel_text_rows,
+    escape_label,
+)
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
@@ -39,6 +45,7 @@ from .vpc import (
     format_vpc_peering_connection_label,
     format_virtual_private_gateway_label,
     PEERING_PANEL_COLORS,
+    VPC_PANEL_COLORS,
     group_subnets_by_vpc,
     identify_route_target,
     summarize_route_table,
@@ -260,22 +267,47 @@ def generate_network_diagram(
 
 def _build_vpc_label(vpc: dict) -> str:
     vpc_id = vpc["VpcId"]
-    details = []
-    cidr_block = vpc.get("CidrBlock")
-    if cidr_block:
-        details.append(f"CIDR: {cidr_block}")
-    dhcp_options_id = vpc.get("DhcpOptionsId")
-    if dhcp_options_id and dhcp_options_id != "default":
-        details.append(f"DHCP Options: {dhcp_options_id}")
+    palette = VPC_PANEL_COLORS
+    wrap32 = partial(wrap_label_text, width=32)
 
-    return build_icon_label(
+    panel_rows = build_panel_text_rows(
         f"VPC {vpc_id}",
-        details,
-        icon_text="VPC",
-        icon_bgcolor="#22543d",
-        body_bgcolor="#e6fffa",
-        body_color="#1d4044",
-        border_color="#22543d",
+        background=palette.header_bg,
+        text_color=palette.header_color,
+        bold=True,
+    )
+
+    panel_rows.extend(
+        build_panel_text_rows(
+            vpc.get("CidrBlock"),
+            label="CIDR",
+            background=palette.info_bg,
+            text_color=palette.info_text,
+            wrap_lines=wrap32,
+        )
+    )
+
+    dhcp_options_id = vpc.get("DhcpOptionsId")
+    if dhcp_options_id == "default":
+        dhcp_options_id = None
+
+    panel_rows.extend(
+        build_panel_text_rows(
+            dhcp_options_id,
+            label="DHCP Options",
+            background=palette.meta_bg,
+            text_color=palette.meta_text,
+            wrap_lines=wrap32,
+        )
+    )
+
+    return build_icon_panel_label(
+        "VPC",
+        panel_rows,
+        border_color=palette.header_bg,
+        icon_bgcolor=palette.header_bg,
+        icon_color=palette.header_color,
+        body_bgcolor="#ffffff",
     )
 
 
@@ -392,84 +424,61 @@ def _render_vpc_cluster(
                 None,
             )
             palette = PEERING_PANEL_COLORS
+            wrap32 = partial(wrap_label_text, width=32)
             panel_rows: List[str] = []
 
-            def append_plain(
-                value: Optional[str], *, background: str, text_color: str, bold: bool = False
-            ) -> None:
-                if not value:
-                    return
-
-                for line in wrap_label_text(value, width=32):
-                    content = escape_label(line)
-                    if bold:
-                        content = f"<B>{content}</B>"
-                    panel_rows.append(
-                        f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'  # Plain row
-                        f'<FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
-                    )
-
-            def append_info(
-                label: str,
-                value: Optional[str],
-                *,
-                background: str,
-                text_color: str,
-            ) -> None:
-                if not value:
-                    return
-
-                label_added = False
-                for line in wrap_label_text(value, width=32):
-                    prefix = ""
-                    if label and not label_added:
-                        prefix = f"<B>{escape_label(label)}:</B> "
-                        label_added = True
-                    panel_rows.append(
-                        f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'  # Info row
-                        f'<FONT COLOR="{text_color}">{prefix}{escape_label(line)}</FONT></TD></TR>'
-                    )
-
-            append_plain(
-                "NAT Gateway",
-                background=palette.header_bg,
-                text_color=palette.header_color,
-                bold=True,
+            panel_rows.extend(
+                build_panel_text_rows(
+                    "NAT Gateway",
+                    background=palette.header_bg,
+                    text_color=palette.header_color,
+                    bold=True,
+                )
             )
-            append_info(
-                "Gateway ID",
-                nat_id,
-                background=palette.meta_bg,
-                text_color=palette.meta_text,
+            panel_rows.extend(
+                build_panel_text_rows(
+                    nat_id,
+                    label="Gateway ID",
+                    background=palette.meta_bg,
+                    text_color=palette.meta_text,
+                    wrap_lines=wrap32,
+                )
             )
-            append_info(
-                "Availability Zone",
-                az,
-                background=palette.info_bg,
-                text_color=palette.info_text,
+            panel_rows.extend(
+                build_panel_text_rows(
+                    az,
+                    label="Availability Zone",
+                    background=palette.info_bg,
+                    text_color=palette.info_text,
+                    wrap_lines=wrap32,
+                )
             )
-            append_info(
-                "Elastic IP",
-                eip,
-                background=palette.info_bg,
-                text_color=palette.info_text,
+            panel_rows.extend(
+                build_panel_text_rows(
+                    eip,
+                    label="Elastic IP",
+                    background=palette.info_bg,
+                    text_color=palette.info_text,
+                    wrap_lines=wrap32,
+                )
             )
-            append_info(
-                "Subnet",
-                subnet_id,
-                background=palette.info_bg,
-                text_color=palette.info_text,
+            panel_rows.extend(
+                build_panel_text_rows(
+                    subnet_id,
+                    label="Subnet",
+                    background=palette.info_bg,
+                    text_color=palette.info_text,
+                    wrap_lines=wrap32,
+                )
             )
 
-            nat_panel = build_panel_table(panel_rows, border_color=palette.header_bg)
-            icon_cell = build_icon_cell(
-                "NAT", icon_bgcolor=palette.header_bg, icon_color=palette.header_color
-            )
-            nat_label = (
-                '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-                f'<TR>{icon_cell}'
-                f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{nat_panel}</TD></TR>'
-                '</TABLE>>'
+            nat_label = build_icon_panel_label(
+                "NAT",
+                panel_rows,
+                border_color=palette.header_bg,
+                icon_bgcolor=palette.header_bg,
+                icon_color=palette.header_color,
+                body_bgcolor="#ffffff",
             )
             node_name = f"{nat_id}_node"
             az_key = az or center_az
