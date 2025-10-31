@@ -938,11 +938,16 @@ def _render_global_services_cluster(
             previous_node = node_id
 
     if alignment_nodes and first_node_id:
-        with graph.subgraph() as alignment_rank:
-            alignment_rank.attr(rank="same")
-            for node in alignment_nodes:
-                alignment_rank.node(node)
-            alignment_rank.node(first_node_id)
+        rank_nodes = list(alignment_nodes) + [first_node_id]
+
+        def _quote_node(node_id: str) -> str:
+            """Quote a node identifier for inclusion in DOT rank statements."""
+
+            escaped = node_id.replace("\"", r"\"")
+            return f'"{escaped}"'
+
+        rank_statement = "{rank=same; " + "; ".join(_quote_node(node) for node in rank_nodes) + ";}"
+        graph.body.append(rank_statement)
 
         graph.edge(
             alignment_nodes[-1],
