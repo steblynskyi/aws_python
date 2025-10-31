@@ -566,8 +566,8 @@ def _render_vpc_cluster(
             igw_label = build_icon_panel_label(
                 "IGW",
                 panel_rows,
-                border_color=palette.header_bg,
-                icon_bgcolor=palette.header_bg,
+                border_color="#000000",
+                icon_bgcolor="#000000",
                 icon_color=palette.header_color,
                 body_bgcolor="#ffffff",
             )
