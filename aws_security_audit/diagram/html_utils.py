@@ -179,15 +179,21 @@ def build_icon_panel_label(
     icon_color: str = "#ffffff",
     body_bgcolor: str = "#ffffff",
     align: str = "LEFT",
+    icon_align: str = "CENTER",
 ) -> str:
-    """Return a panel label featuring an icon column and bordered body."""
+    """Return a panel label featuring an icon column and bordered body.
+
+    ``icon_align`` allows callers to centre the icon while keeping the body
+    text left-aligned, matching the styling used by the Internet Gateway
+    panels in the network diagram.
+    """
 
     panel = build_panel_table(panel_rows, border_color=border_color)
     icon_cell = build_icon_cell(
         icon_text,
         icon_bgcolor=icon_bgcolor,
         icon_color=icon_color,
-        align=align,
+        align=icon_align,
     )
 
     return (
