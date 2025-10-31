@@ -45,6 +45,17 @@ VPC_PANEL_COLORS = PanelColors(
 )
 
 
+INTERNET_GATEWAY_PANEL_COLORS = PanelColors(
+    header_bg="#1f2937",
+    header_color="#ffffff",
+    info_bg="#f8fafc",
+    info_text="#1a202c",
+    meta_bg="#e2e8f0",
+    meta_text="#1a202c",
+    section_bg="#cbd5f5",
+)
+
+
 def group_subnets_by_vpc(subnets: Iterable[dict]) -> Dict[str, List[dict]]:
     """Return mapping of VPC identifiers to their subnets."""
 
@@ -818,6 +829,7 @@ __all__ = [
     "summarize_route_table",
     "PanelColors",
     "PEERING_PANEL_COLORS",
+    "INTERNET_GATEWAY_PANEL_COLORS",
     "VPC_PANEL_COLORS",
     "wrap_label_text",
 ]

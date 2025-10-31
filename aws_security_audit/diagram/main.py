@@ -44,6 +44,7 @@ from .vpc import (
     format_subnet_cell_label,
     format_vpc_peering_connection_label,
     format_virtual_private_gateway_label,
+    INTERNET_GATEWAY_PANEL_COLORS,
     PEERING_PANEL_COLORS,
     VPC_PANEL_COLORS,
     group_subnets_by_vpc,
@@ -500,7 +501,7 @@ def _render_vpc_cluster(
         for igw_id in igw_in_vpc:
             node_name = f"{igw_id}_node"
             igw_details = context.internet_gateways.get(igw_id, {})
-            palette = PEERING_PANEL_COLORS
+            palette = INTERNET_GATEWAY_PANEL_COLORS
             wrap32 = partial(wrap_label_text, width=32)
             panel_rows: List[str] = []
 
@@ -941,10 +942,10 @@ def _render_vpc_cluster(
                         "Internet Gateway",
                         ["Internet access"],
                         icon_text="IGW",
-                        icon_bgcolor="#2d3748",
-                        body_bgcolor="#f7fafc",
-                        body_color="#2d3748",
-                        border_color="#2d3748",
+                        icon_bgcolor=INTERNET_GATEWAY_PANEL_COLORS.header_bg,
+                        body_bgcolor=INTERNET_GATEWAY_PANEL_COLORS.info_bg,
+                        body_color=INTERNET_GATEWAY_PANEL_COLORS.info_text,
+                        border_color=INTERNET_GATEWAY_PANEL_COLORS.header_bg,
                     ),
                 ),
             ]
