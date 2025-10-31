@@ -361,30 +361,6 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         append_info("CIDR", cell.cidr)
         append_info("Availability Zone", cell.az)
 
-        classification_map = {
-            "public": "Public",
-            "private_app": "Private App",
-            "private_data": "Private Data",
-            "shared": "Shared / Directory",
-            "ingress": "Ingress",
-        }
-        classification_value = classification_map.get(cell.classification)
-        if not classification_value and cell.classification:
-            classification_value = cell.classification.replace("_", " ").title()
-        append_info("Classification", classification_value)
-
-        tier_map = {
-            "public": "Public",
-            "private_app": "Private App",
-            "private_data": "Private Data",
-            "shared": "Shared / Directory",
-            "ingress": "Ingress",
-        }
-        tier_value = tier_map.get(cell.tier)
-        if not tier_value and cell.tier:
-            tier_value = cell.tier.replace("_", " ").title()
-        append_info("Tier", tier_value)
-
         isolation_value = "Isolated" if cell.is_isolated else "Connected"
         append_info("Isolation", isolation_value)
 
