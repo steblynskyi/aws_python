@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from html import escape as html_escape
-from typing import Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional
 
 
 def escape_label(value: str) -> str:
@@ -96,6 +96,81 @@ def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
     )
 
 
+def build_panel_text_rows(
+    value: Optional[str],
+    *,
+    background: str,
+    text_color: str,
+    bold: bool = False,
+    label: Optional[str] = None,
+    wrap_lines: Optional[Callable[[str], Iterable[str]]] = None,
+    align: str = "LEFT",
+) -> List[str]:
+    """Return table row strings formatted for panel-style labels.
+
+    ``value`` is first normalised into a list of ``lines`` via the optional
+    ``wrap_lines`` callable before being escaped and wrapped in ``<TR>``
+    elements.  The first line can be emphasised via ``bold`` or by supplying a
+    ``label`` that will be rendered in bold followed by the associated value.
+    Subsequent lines omit the label to match the styling of NAT gateway panels.
+    """
+
+    if not value:
+        return []
+
+    wrapper: Callable[[str], Iterable[str]]
+    if wrap_lines is None:
+        wrapper = lambda text: [text]
+    else:
+        wrapper = wrap_lines
+
+    rows: List[str] = []
+    label_rendered = False
+
+    for raw_line in wrapper(value):
+        content = escape_label(raw_line)
+        prefix = ""
+        if label and not label_rendered:
+            prefix = f"<B>{escape_label(label)}:</B> "
+            label_rendered = True
+        if bold:
+            content = f"<B>{content}</B>"
+        rows.append(
+            f'<TR><TD ALIGN="{align}" BGCOLOR="{background}">'  # Panel row
+            f'<FONT COLOR="{text_color}">{prefix}{content}</FONT></TD></TR>'
+        )
+
+    return rows
+
+
+def build_icon_panel_label(
+    icon_text: str,
+    panel_rows: Iterable[str],
+    *,
+    border_color: str,
+    icon_bgcolor: str = "#1f2937",
+    icon_color: str = "#ffffff",
+    body_bgcolor: str = "#ffffff",
+    align: str = "LEFT",
+) -> str:
+    """Return a panel label featuring an icon column and bordered body."""
+
+    panel = build_panel_table(panel_rows, border_color=border_color)
+    icon_cell = build_icon_cell(
+        icon_text,
+        icon_bgcolor=icon_bgcolor,
+        icon_color=icon_color,
+        align=align,
+    )
+
+    return (
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
+        f'COLOR="{border_color}"><TR>{icon_cell}'
+        f'<TD ALIGN="{align}" VALIGN="TOP" BGCOLOR="{body_bgcolor}">{panel}</TD>'
+        "</TR></TABLE>>"
+    )
+
+
 def build_icon_label(
     title: str,
     lines: Iterable[str],
@@ -145,6 +220,8 @@ __all__ = [
     "format_vertical_label",
     "build_icon_cell",
     "build_panel_table",
+    "build_panel_text_rows",
+    "build_icon_panel_label",
     "build_icon_label",
 ]
 
