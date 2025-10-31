@@ -999,22 +999,6 @@ def _render_vpc_cluster(
                     ),
                 ),
             ]
-            if has_global_services:
-                legend_entries.append(
-                    (
-                        "global_service",
-                        build_icon_label(
-                            "Global Service Panel",
-                            ["Aggregated account view"],
-                            icon_text="GLB",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#f7fafc",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        ),
-                    )
-                )
-
             for key, label in legend_entries:
                 legend.node(
                     f"legend_{key}_{vpc_id}",
