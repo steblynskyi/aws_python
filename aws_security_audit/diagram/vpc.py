@@ -164,6 +164,8 @@ def summarize_route_table(route_table: Optional[dict]) -> Optional[RouteSummary]
     for route in route_table.get("Routes", []):
         destination = route.get("DestinationCidrBlock") or route.get("DestinationIpv6CidrBlock")
         if not destination:
+            destination = route.get("DestinationPrefixListId")
+        if not destination:
             continue
         target, target_type, description = identify_route_target(route)
         state = route.get("State")
