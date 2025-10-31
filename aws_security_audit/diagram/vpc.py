@@ -4,7 +4,7 @@ from __future__ import annotations
 from textwrap import wrap
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .html_utils import escape_label
+from .html_utils import build_icon_cell, escape_label
 
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
 
@@ -406,19 +406,11 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         )
 
     row_count = 2 + (1 if cell.instances else 0)
-    icon_cell_attributes = [
-        f'ROWSPAN="{row_count}"',
-        f'BGCOLOR="{icon_bgcolor}"',
-        'ALIGN="CENTER"',
-        'VALIGN="TOP"',
-        'WIDTH="32"',
-        'HEIGHT="32"',
-    ]
-    # Avoid a fixed-size icon column so that labels with longer icon text can
-    # expand without triggering Graphviz ``cell size too small`` warnings.
-    icon_cell = (
-        f'<TD {" ".join(icon_cell_attributes)}><FONT COLOR="#ffffff">'
-        f'<B>{escape_label(icon_text)}</B></FONT></TD>'
+    icon_cell = build_icon_cell(
+        icon_text,
+        icon_bgcolor=icon_bgcolor,
+        icon_color="#ffffff",
+        rowspan=row_count,
     )
 
     return (
