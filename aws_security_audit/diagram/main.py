@@ -314,6 +314,7 @@ def generate_network_diagram(
         )
 
     graph = _create_graph()
+    alignment_nodes: List[str] = []
 
     if include_network:
         resources = _collect_ec2_resources(session)
@@ -321,10 +322,14 @@ def generate_network_diagram(
         context = _prepare_context(resources, db_instances)
 
         for vpc in resources.vpcs:
-            _render_vpc_cluster(graph, vpc, context, has_global_services)
+            top_node = _render_vpc_cluster(graph, vpc, context, has_global_services)
+            if has_global_services:
+                alignment_nodes.append(top_node)
 
     if has_global_services:
-        _render_global_services_cluster(graph, global_services)
+        _render_global_services_cluster(
+            graph, global_services, alignment_nodes=alignment_nodes
+        )
 
     return _render_graph(graph, output_path)
 
@@ -370,7 +375,7 @@ def _build_vpc_label(vpc: dict) -> str:
 
 def _render_vpc_cluster(
     graph: "Digraph", vpc: dict, context: DiagramContext, has_global_services: bool
-) -> None:
+) -> str:
     vpc_id = vpc["VpcId"]
     subnets_in_vpc = list(context.subnets_by_vpc.get(vpc_id, []))
     azs = sorted(
@@ -898,9 +903,14 @@ def _render_vpc_cluster(
                     weight="10",
                 )
 
+    return f"{vpc_id}_internet"
+
 
 def _render_global_services_cluster(
-    graph: "Digraph", global_services: List[GlobalServiceSummary]
+    graph: "Digraph",
+    global_services: List[GlobalServiceSummary],
+    *,
+    alignment_nodes: Optional[List[str]] = None,
 ) -> None:
     with graph.subgraph(name="cluster_global_services") as global_graph:
         global_graph.attr(label="<<B>Global / Regional Services</B>>")
@@ -909,7 +919,11 @@ def _render_global_services_cluster(
         global_graph.attr(bgcolor="#f7fafc")
         global_graph.attr(fontsize="12")
         global_graph.attr(fontname="Helvetica")
+        global_graph.attr(rank="min")
+        global_graph.attr(labelloc="t")
+        global_graph.attr(labeljust="r")
         previous_node: Optional[str] = None
+        first_node_id: Optional[str] = None
         for index, summary in enumerate(global_services):
             node_id = f"global_service_{index}"
             global_graph.node(
@@ -917,9 +931,27 @@ def _render_global_services_cluster(
                 build_global_service_label(summary),
                 shape="plaintext",
             )
+            if first_node_id is None:
+                first_node_id = node_id
             if previous_node is not None:
                 global_graph.edge(previous_node, node_id, style="invis")
             previous_node = node_id
+
+    if alignment_nodes and first_node_id:
+        with graph.subgraph() as alignment_rank:
+            alignment_rank.attr(rank="same")
+            for node in alignment_nodes:
+                alignment_rank.node(node)
+            alignment_rank.node(first_node_id)
+
+        graph.edge(
+            alignment_nodes[-1],
+            first_node_id,
+            style="invis",
+            weight="2",
+            minlen="2",
+            constraint="false",
+        )
 
 
 def _render_graph(graph: "Digraph", output_path: str) -> Optional[str]:
