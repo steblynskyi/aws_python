@@ -938,16 +938,19 @@ def _render_global_services_cluster(
             previous_node = node_id
 
     if alignment_nodes and first_node_id:
-        rank_nodes = list(alignment_nodes) + [first_node_id]
+        # ``rank`` statements cannot be injected directly into the root graph body
+        # when the referenced nodes already belong to other ranksets (for example,
+        # nodes inside tier clusters). Doing so causes Graphviz to emit warnings
+        # similar to ``node ... was already in a rankset`` which are treated as
+        # errors by our renderer. Instead, create a dedicated non-cluster
+        # subgraph to hold the alignment directive so that Graphviz can merge the
+        # rank requirements without complaint.
+        rank_nodes = list(dict.fromkeys(list(alignment_nodes) + [first_node_id]))
 
-        def _quote_node(node_id: str) -> str:
-            """Quote a node identifier for inclusion in DOT rank statements."""
-
-            escaped = node_id.replace("\"", r"\"")
-            return f'"{escaped}"'
-
-        rank_statement = "{rank=same; " + "; ".join(_quote_node(node) for node in rank_nodes) + ";}"
-        graph.body.append(rank_statement)
+        with graph.subgraph() as alignment_graph:
+            alignment_graph.attr(rank="same")
+            for node_id in rank_nodes:
+                alignment_graph.node(node_id)
 
         graph.edge(
             alignment_nodes[-1],
