@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 from .html_utils import build_icon_label, escape_label
 
@@ -36,6 +36,8 @@ from .vpc import (
     build_subnet_cell,
     classify_subnet,
     format_subnet_cell_label,
+    format_vpc_peering_connection_label,
+    format_virtual_private_gateway_label,
     group_subnets_by_vpc,
     identify_route_target,
     summarize_route_table,
@@ -201,60 +203,6 @@ def _prepare_context(
         vpn_connections_by_vgw=vpn_connections_by_vgw,
         customer_gateways=customer_gateways,
     )
-
-
-def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
-    cidrs: List[str] = []
-    seen: Set[str] = set()
-
-    def _add_cidr(value: Optional[str]) -> None:
-        if value and value not in seen:
-            seen.add(value)
-            cidrs.append(value)
-
-    _add_cidr(vpc_info.get("CidrBlock"))
-
-    for block in vpc_info.get("CidrBlockSet", []) or []:
-        _add_cidr(block.get("CidrBlock"))
-
-    for block in vpc_info.get("Ipv6CidrBlockSet", []) or []:
-        _add_cidr(block.get("Ipv6CidrBlock"))
-
-    return cidrs
-
-
-def _format_vpc_peering_label(connection_id: str, connection: dict) -> Tuple[str, List[str]]:
-    requester = connection.get("RequesterVpcInfo", {}) or {}
-    accepter = connection.get("AccepterVpcInfo", {}) or {}
-
-    requester_vpc = requester.get("VpcId") or "Unknown VPC"
-    accepter_vpc = accepter.get("VpcId") or "Unknown VPC"
-
-    requester_cidrs = _collect_vpc_cidrs(requester)
-    accepter_cidrs = _collect_vpc_cidrs(accepter)
-
-    name = next(
-        (
-            tag.get("Value")
-            for tag in connection.get("Tags", [])
-            if tag.get("Key") == "Name" and tag.get("Value")
-        ),
-        None,
-    )
-
-    title_name = name or connection_id
-    title = f"VPC Peering: {title_name}"
-
-    lines = [f"Peering Connection ID: {connection_id}"]
-    lines.append(f"Requester VPC: {requester_vpc}")
-    if requester_cidrs:
-        lines.append(f"Requester CIDRs: {', '.join(requester_cidrs)}")
-
-    lines.append(f"Accepter VPC: {accepter_vpc}")
-    if accepter_cidrs:
-        lines.append(f"Accepter CIDRs: {', '.join(accepter_cidrs)}")
-
-    return title, lines
 
 
 def generate_network_diagram(
@@ -522,70 +470,14 @@ def _render_vpc_cluster(
 
                     label = None
                     if node_type == "vpc_peering_connection":
-                        connection = context.vpc_peering_connections.get(node_id, {})
-                        if connection:
-                            title, lines = _format_vpc_peering_label(node_id, connection)
-                        else:
-                            title = f"VPC Peering: {node_id}"
-                            lines = [f"Peering Connection ID: {node_id}"]
-                        label = build_icon_label(
-                            title,
-                            lines,
-                            icon_text="PCX",
-                            icon_bgcolor="#2c5282",
-                            body_bgcolor="#f7fafc",
-                            body_color="#1a365d",
-                            border_color="#2c5282",
-                        )
+                        connection = context.vpc_peering_connections.get(node_id)
+                        label = format_vpc_peering_connection_label(node_id, connection)
                     elif node_type == "virtual_private_gateway":
-                        def _build_virtual_private_gateway_label(gateway_id: str) -> str:
-                            lines: List[str] = [f"Gateway ID: {gateway_id}"]
-
-                            connections = context.vpn_connections_by_vgw.get(gateway_id, [])
-                            for index, connection in enumerate(connections):
-                                if index:
-                                    lines.append(" ")
-
-                                vpn_id = connection.get("VpnConnectionId", "unknown")
-                                vpn_name = next(
-                                    (
-                                        tag.get("Value")
-                                        for tag in connection.get("Tags", [])
-                                        if tag.get("Key") == "Name" and tag.get("Value")
-                                    ),
-                                    None,
-                                )
-                                customer_gateway_id = connection.get("CustomerGatewayId") or ""
-                                customer_gateway = context.customer_gateways.get(
-                                    customer_gateway_id, {}
-                                )
-                                customer_address = (
-                                    customer_gateway.get("IpAddress")
-                                    or customer_gateway_id
-                                    or "unknown"
-                                )
-
-                                if vpn_name:
-                                    lines.append(f"Name: {vpn_name}")
-                                else:
-                                    lines.append("Name: (untagged)")
-                                lines.append(f"VPN ID: {vpn_id}")
-                                lines.append(f"Customer gateway: {customer_address}")
-
-                            if len(lines) == 1:
-                                lines.append("No Site-to-Site VPN connections found")
-
-                            return build_icon_label(
-                                "Virtual Private Gateway",
-                                lines,
-                                icon_text="VGW",
-                                icon_bgcolor="#2c5282",
-                                body_bgcolor="#edf2f7",
-                                body_color="#1a365d",
-                                border_color="#2c5282",
-                            )
-
-                        label = _build_virtual_private_gateway_label(node_id)
+                        label = format_virtual_private_gateway_label(
+                            node_id,
+                            context.vpn_connections_by_vgw.get(node_id, []),
+                            context.customer_gateways,
+                        )
                     else:
                         label_map = {
                             "egress_only_internet_gateway": build_icon_label(

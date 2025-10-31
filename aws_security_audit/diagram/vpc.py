@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from textwrap import wrap
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .html_utils import build_icon_cell, escape_label
 
@@ -300,6 +300,284 @@ def wrap_label_text(value: str, width: int = 26) -> List[str]:
     return refined or [value]
 
 
+def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
+    """Return a list of IPv4/IPv6 CIDRs associated with a VPC attachment."""
+
+    cidrs: List[str] = []
+    seen: Set[str] = set()
+
+    def _add_cidr(value: Optional[str]) -> None:
+        if value and value not in seen:
+            seen.add(value)
+            cidrs.append(value)
+
+    _add_cidr(vpc_info.get("CidrBlock"))
+
+    for block in vpc_info.get("CidrBlockSet", []) or []:
+        _add_cidr(block.get("CidrBlock"))
+
+    for block in vpc_info.get("Ipv6CidrBlockSet", []) or []:
+        _add_cidr(block.get("Ipv6CidrBlock"))
+
+    return cidrs
+
+
+def _build_panel_table(rows: List[str], *, border_color: str) -> str:
+    """Return a HTML table wrapper for detail panels."""
+
+    return (
+        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
+        f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
+    )
+
+
+def format_vpc_peering_connection_label(
+    connection_id: str,
+    connection: Optional[dict],
+) -> str:
+    """Return a richly formatted label for a VPC peering connection."""
+
+    connection = connection or {}
+    requester = connection.get("RequesterVpcInfo", {}) or {}
+    accepter = connection.get("AccepterVpcInfo", {}) or {}
+
+    header_bg = "#1e3a8a"
+    header_color = "#ffffff"
+    info_bg = "#eff6ff"
+    info_text = "#1e3a8a"
+    meta_bg = "#dbeafe"
+    meta_text = "#1e3a8a"
+    section_bg = "#bfdbfe"
+
+    rows: List[str] = [
+        (
+            f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">'
+            f'<FONT COLOR="{header_color}"><B>VPC Peering</B></FONT></TD></TR>'
+        )
+    ]
+
+    name = next(
+        (
+            tag.get("Value")
+            for tag in connection.get("Tags", [])
+            if tag.get("Key") == "Name" and tag.get("Value")
+        ),
+        None,
+    )
+
+    def append_plain(
+        value: Optional[str],
+        *,
+        background: str = info_bg,
+        text_color: str = info_text,
+        bold: bool = False,
+    ) -> None:
+        if not value:
+            return
+
+        for line in wrap_label_text(value, width=32):
+            content = escape_label(line)
+            if bold:
+                content = f"<B>{content}</B>"
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'  # Value row
+                f'<FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
+            )
+
+    def append_info(
+        label: str,
+        value: Optional[str],
+        *,
+        background: str = info_bg,
+        text_color: str = info_text,
+    ) -> None:
+        if not value:
+            return
+
+        label_added = False
+        for line in wrap_label_text(value, width=32):
+            prefix = ""
+            if label and not label_added:
+                prefix = f"<B>{escape_label(label)}:</B> "
+                label_added = True
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'
+                f'<FONT COLOR="{text_color}">{prefix}{escape_label(line)}</FONT></TD></TR>'
+            )
+
+    if name:
+        append_plain(name, bold=True)
+
+    append_info("Peering Connection ID", connection_id, background=meta_bg, text_color=meta_text)
+
+    status = connection.get("Status", {}) or {}
+    status_text = status.get("Message") or status.get("Code")
+    append_info("Status", status_text)
+
+    def append_vpc_section(title: str, info: dict) -> None:
+        append_plain(title, background=section_bg, text_color=info_text, bold=True)
+        append_info("VPC ID", info.get("VpcId") or "Unknown VPC")
+        append_info("Account", info.get("OwnerId"))
+        append_info("Region", info.get("Region"))
+        cidrs = _collect_vpc_cidrs(info)
+        if cidrs:
+            append_info("CIDRs", ", ".join(cidrs))
+
+    append_vpc_section("Requester", requester)
+    append_vpc_section("Accepter", accepter)
+
+    panel = _build_panel_table(rows, border_color=header_bg)
+    icon_cell = build_icon_cell("PCX", icon_bgcolor=header_bg, icon_color="#ffffff")
+
+    return (
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        f'<TR>{icon_cell}'
+        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{panel}</TD></TR>'
+        '</TABLE>>'
+    )
+
+
+def format_virtual_private_gateway_label(
+    gateway_id: str,
+    connections: Optional[List[dict]],
+    customer_gateways: Dict[str, dict],
+) -> str:
+    """Return a richly formatted label for a virtual private gateway."""
+
+    header_bg = "#1f2937"
+    header_color = "#ffffff"
+    info_bg = "#f8fafc"
+    info_text = "#1a202c"
+    meta_bg = "#e2e8f0"
+    meta_text = "#1a202c"
+    connection_bg = "#edf2f7"
+
+    rows: List[str] = [
+        (
+            f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">'
+            f'<FONT COLOR="{header_color}"><B>Virtual Private Gateway</B></FONT></TD></TR>'
+        )
+    ]
+
+    def append_plain(
+        value: Optional[str],
+        *,
+        background: str = info_bg,
+        text_color: str = info_text,
+        italic: bool = False,
+        bold: bool = False,
+    ) -> None:
+        if not value:
+            return
+
+        for line in wrap_label_text(value, width=32):
+            content = escape_label(line)
+            if bold:
+                content = f"<B>{content}</B>"
+            if italic:
+                content = f"<I>{content}</I>"
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'
+                f'<FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
+            )
+
+    append_plain(
+        f"Gateway ID: {gateway_id}",
+        background=meta_bg,
+        text_color=meta_text,
+        bold=True,
+    )
+
+    connection_list = sorted(connections or [], key=lambda item: item.get("VpnConnectionId", ""))
+
+    if not connection_list:
+        append_plain(
+            "No Site-to-Site VPN connections found",
+            background=connection_bg,
+            text_color=info_text,
+            italic=True,
+        )
+    else:
+        append_plain(
+            f"Connections: {len(connection_list)}",
+            background=info_bg,
+            text_color=info_text,
+            bold=True,
+        )
+
+        for connection in connection_list:
+            vpn_id = connection.get("VpnConnectionId", "unknown")
+            vpn_name = next(
+                (
+                    tag.get("Value")
+                    for tag in connection.get("Tags", [])
+                    if tag.get("Key") == "Name" and tag.get("Value")
+                ),
+                None,
+            )
+            connection_type = connection.get("Type")
+            state = connection.get("State") or connection.get("Status", {}).get("Message")
+            customer_gateway_id = connection.get("CustomerGatewayId") or ""
+            customer_gateway = customer_gateways.get(customer_gateway_id, {})
+            customer_address = (
+                customer_gateway.get("IpAddress")
+                or customer_gateway_id
+                or "unknown"
+            )
+
+            telemetry_ips = sorted(
+                {
+                    telemetry.get("OutsideIpAddress")
+                    for telemetry in connection.get("VgwTelemetry", []) or []
+                    if telemetry.get("OutsideIpAddress")
+                }
+            )
+
+            connection_rows: List[str] = []
+
+            def append_connection_line(text: str, *, bold: bool = False) -> None:
+                for index, line in enumerate(wrap_label_text(text, width=32)):
+                    content = escape_label(line)
+                    if bold and index == 0:
+                        content = f"<B>{content}</B>"
+                    connection_rows.append(
+                        f'<TR><TD ALIGN="LEFT"><FONT COLOR="{info_text}">{content}</FONT></TD></TR>'
+                    )
+
+            title = vpn_name or vpn_id
+            append_connection_line(title, bold=True)
+            append_connection_line(f"VPN ID: {vpn_id}")
+            if connection_type:
+                append_connection_line(f"Type: {connection_type}")
+            if state:
+                append_connection_line(f"Status: {state}")
+            append_connection_line(f"Customer gateway: {customer_address}")
+            if customer_gateway_id and customer_gateway_id != customer_address:
+                append_connection_line(f"Customer gateway ID: {customer_gateway_id}")
+            if telemetry_ips:
+                append_connection_line(f"Outside IPs: {', '.join(telemetry_ips)}")
+
+            connection_table = (
+                '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
+                + "".join(connection_rows)
+                + "</TABLE>"
+            )
+
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{connection_bg}">{connection_table}</TD></TR>'
+            )
+
+    panel = _build_panel_table(rows, border_color=header_bg)
+    icon_cell = build_icon_cell("VGW", icon_bgcolor=header_bg, icon_color="#ffffff")
+
+    return (
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        f'<TR>{icon_cell}'
+        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{panel}</TD></TR>'
+        '</TABLE>>'
+    )
+
+
 def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
 
@@ -467,6 +745,8 @@ __all__ = [
     "build_subnet_cell",
     "classify_subnet",
     "format_subnet_cell_label",
+    "format_vpc_peering_connection_label",
+    "format_virtual_private_gateway_label",
     "group_subnets_by_vpc",
     "identify_route_target",
     "summarize_route_table",
