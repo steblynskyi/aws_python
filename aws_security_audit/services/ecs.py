@@ -8,9 +8,10 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import batch_iterable, finding_from_exception, safe_paginate
-from . import ServiceReport, inventory_item_from_findings
+from . import ServiceReport, inventory_item_from_findings, register_service
 
 
+@register_service("ecs")
 def audit_ecs_clusters(session: boto3.session.Session) -> ServiceReport:
     """Inspect ECS clusters for observability and exec support."""
 

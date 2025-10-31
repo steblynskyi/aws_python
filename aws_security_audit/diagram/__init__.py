@@ -25,15 +25,21 @@ except ModuleNotFoundError as exc:  # pragma: no cover - triggered when optional
 
 from .registry import (
     GLOBAL_SERVICE_BUILDERS,
+    GLOBAL_SERVICE_REGISTRY,
     GlobalServiceBuilder,
     build_global_service_summaries,
+    get_global_service_builders,
     iter_global_service_summaries,
+    register_global_service,
 )
 
 __all__ = [
     "generate_network_diagram",
     "GLOBAL_SERVICE_BUILDERS",
+    "GLOBAL_SERVICE_REGISTRY",
     "GlobalServiceBuilder",
     "build_global_service_summaries",
+    "get_global_service_builders",
     "iter_global_service_summaries",
+    "register_global_service",
 ]

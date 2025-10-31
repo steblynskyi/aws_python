@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterator, List, Mapping, Optional, Tuple
+from types import MappingProxyType
+from typing import Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from .acm import build_acm_summary
-from .ecs import build_ecs_summary
-from .eks import build_eks_summary
-from .iam import build_iam_summary
-from .kms import build_kms_summary
 from .models import GlobalServiceSummary
-from .route53 import build_route53_summary
-from .s3 import build_s3_summary
-from .ssm import build_ssm_summary
 
 
 GlobalServiceBuilder = Callable[
@@ -24,17 +17,65 @@ GlobalServiceBuilder = Callable[
 """Callable used to construct a :class:`GlobalServiceSummary`."""
 
 
-GLOBAL_SERVICE_BUILDERS: Dict[str, GlobalServiceBuilder] = {
-    "kms": build_kms_summary,
-    "s3": build_s3_summary,
-    "acm": build_acm_summary,
-    "route53": build_route53_summary,
-    "iam": build_iam_summary,
-    "ssm": build_ssm_summary,
-    "eks": build_eks_summary,
-    "ecs": build_ecs_summary,
-}
-"""Default mapping of global service identifiers to summary builders."""
+class GlobalServiceRegistry:
+    """Registry storing builders for diagram global service summaries."""
+
+    def __init__(self) -> None:
+        self._builders: Dict[str, GlobalServiceBuilder] = {}
+
+    @staticmethod
+    def _normalize(name: str) -> str:
+        if not name:
+            raise ValueError("Service name must be a non-empty string")
+        return name.strip().lower()
+
+    def register(self, name: str) -> Callable[[GlobalServiceBuilder], GlobalServiceBuilder]:
+        normalized = self._normalize(name)
+
+        def decorator(func: GlobalServiceBuilder) -> GlobalServiceBuilder:
+            if normalized in self._builders and self._builders[normalized] is not func:
+                raise ValueError(f"Diagram service '{name}' is already registered")
+            self._builders[normalized] = func
+            return func
+
+        return decorator
+
+    def __contains__(self, name: object) -> bool:
+        if not isinstance(name, str):
+            return False
+        return self._normalize(name) in self._builders
+
+    def __getitem__(self, name: str) -> GlobalServiceBuilder:
+        return self._builders[self._normalize(name)]
+
+    def items(self) -> Iterator[Tuple[str, GlobalServiceBuilder]]:
+        return iter(self._builders.items())
+
+    def as_mapping(self) -> Mapping[str, GlobalServiceBuilder]:
+        return MappingProxyType(self._builders)
+
+
+GLOBAL_SERVICE_REGISTRY = GlobalServiceRegistry()
+register_global_service = GLOBAL_SERVICE_REGISTRY.register
+
+
+def get_global_service_builders() -> Mapping[str, GlobalServiceBuilder]:
+    """Return a read-only mapping of registered diagram builders."""
+
+    return GLOBAL_SERVICE_REGISTRY.as_mapping()
+
+
+def _import_service_modules() -> None:
+    """Import modules whose side effects register global service builders."""
+
+    from . import acm, ecs, eks, iam, kms, route53, s3, ssm  # noqa: F401
+
+
+_import_service_modules()
+
+GLOBAL_SERVICE_BUILDERS: Mapping[str, GlobalServiceBuilder] = (
+    get_global_service_builders()
+)
 
 
 def _call_builder(
@@ -52,11 +93,17 @@ def iter_global_service_summaries(
     session: boto3.session.Session,
     max_items: int,
     *,
-    builders: Mapping[str, GlobalServiceBuilder] = GLOBAL_SERVICE_BUILDERS,
+    builders: Mapping[str, GlobalServiceBuilder] | Iterable[Tuple[str, GlobalServiceBuilder]] = GLOBAL_SERVICE_BUILDERS,
 ) -> Iterator[Tuple[str, GlobalServiceSummary]]:
     """Yield pairs of service identifiers and their summaries."""
 
-    for service, builder in builders.items():
+    items: Iterable[Tuple[str, GlobalServiceBuilder]]
+    if isinstance(builders, Mapping):
+        items = builders.items()
+    else:
+        items = builders
+
+    for service, builder in items:
         summary = _call_builder(builder, session, max_items)
         if summary:
             yield service, summary
@@ -66,7 +113,7 @@ def build_global_service_summaries(
     session: boto3.session.Session,
     max_items: int,
     *,
-    builders: Mapping[str, GlobalServiceBuilder] = GLOBAL_SERVICE_BUILDERS,
+    builders: Mapping[str, GlobalServiceBuilder] | Iterable[Tuple[str, GlobalServiceBuilder]] = GLOBAL_SERVICE_BUILDERS,
 ) -> List[GlobalServiceSummary]:
     """Return a list of global service summaries using ``builders``."""
 
@@ -80,8 +127,11 @@ def build_global_service_summaries(
 
 __all__ = [
     "GLOBAL_SERVICE_BUILDERS",
+    "GLOBAL_SERVICE_REGISTRY",
     "GlobalServiceBuilder",
     "build_global_service_summaries",
+    "get_global_service_builders",
     "iter_global_service_summaries",
+    "register_global_service",
 ]
 

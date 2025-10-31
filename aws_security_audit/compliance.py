@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Set, Tuple
 
-from .services import SERVICE_CHECKS
+from .services import SERVICE_REGISTRY
 
 # Mapping of compliance framework identifiers to the service checks that
 # contribute evidence for that framework. Keys are normalized to lowercase so
@@ -30,7 +30,7 @@ def expand_compliance_frameworks(frameworks: Iterable[str]) -> Set[str]:
 
     Raises a :class:`ValueError` when an unknown framework is requested and a
     :class:`RuntimeError` if the static mapping references a service that is not
-    registered in :data:`aws_security_audit.services.SERVICE_CHECKS`.
+    registered in :mod:`aws_security_audit.services`.
     """
 
     normalized = {framework.lower() for framework in frameworks}
@@ -46,7 +46,7 @@ def expand_compliance_frameworks(frameworks: Iterable[str]) -> Set[str]:
     for framework in normalized:
         services.update(COMPLIANCE_SERVICE_MAP[framework])
 
-    unknown_services = sorted(services - set(SERVICE_CHECKS))
+    unknown_services = sorted(services - set(SERVICE_REGISTRY.keys()))
     if unknown_services:
         raise RuntimeError(
             "Compliance service map references unknown service(s): "

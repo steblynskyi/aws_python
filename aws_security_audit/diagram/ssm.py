@@ -8,6 +8,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..utils import safe_paginate
 from .models import GlobalServiceSummary, summarize_global_service_lines
+from .registry import register_global_service
 
 
 def _format_instance_label(instance: dict) -> Optional[str]:
@@ -28,6 +29,7 @@ def _format_instance_label(instance: dict) -> Optional[str]:
     return instance_id
 
 
+@register_global_service("ssm")
 def build_ssm_summary(
     session: boto3.session.Session, max_items: int
 ) -> Optional[GlobalServiceSummary]:

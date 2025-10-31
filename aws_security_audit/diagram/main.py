@@ -27,7 +27,10 @@ from .models import (
     SubnetCell,
 )
 from .rds import group_rds_instances_by_vpc
-from .registry import GLOBAL_SERVICE_BUILDERS, build_global_service_summaries
+from .registry import (
+    GLOBAL_SERVICE_REGISTRY,
+    build_global_service_summaries,
+)
 from .vpc import (
     build_route_table_indexes,
     build_subnet_cell,
@@ -273,13 +276,10 @@ def generate_network_diagram(
         or bool(requested_services & {"ec2", "vpc", "rds"})
     )
 
-    builders = GLOBAL_SERVICE_BUILDERS
+    builders = list(GLOBAL_SERVICE_REGISTRY.items())
     if requested_services is not None:
-        builders = {
-            name: builder
-            for name, builder in GLOBAL_SERVICE_BUILDERS.items()
-            if name in requested_services
-        }
+        requested = set(requested_services)
+        builders = [(name, builder) for name, builder in builders if name in requested]
 
     global_services = build_global_service_summaries(
         session, max_items=8, builders=builders

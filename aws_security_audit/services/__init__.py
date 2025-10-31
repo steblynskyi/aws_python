@@ -1,12 +1,14 @@
-"""Service-specific audit entry points."""
+"""Service-specific audit entry points and registry helpers."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List
+from types import MappingProxyType
+from typing import Callable, Dict, Iterable, Iterator, List, Mapping
 
 import boto3
 
 from ..findings import Finding, InventoryItem
+
 
 @dataclass
 class ServiceReport:
@@ -55,35 +57,76 @@ def inventory_item_from_findings(
         details="; ".join(details_parts),
     )
 
-from .acm import audit_acm_certificates
-from .ec2 import audit_ec2_instances
-from .ecs import audit_ecs_clusters
-from .eks import audit_eks_clusters
-from .iam import audit_iam_users
-from .kms import audit_kms_keys
-from .rds import audit_rds_instances
-from .route53 import audit_route53_zones
-from .s3 import audit_s3_buckets
-from .ssm import audit_ssm_managed_instances
-from .vpc import audit_vpcs
 
-SERVICE_CHECKS: Dict[str, ServiceChecker] = {
-    "vpc": audit_vpcs,
-    "ec2": audit_ec2_instances,
-    "s3": audit_s3_buckets,
-    "iam": audit_iam_users,
-    "rds": audit_rds_instances,
-    "kms": audit_kms_keys,
-    "route53": audit_route53_zones,
-    "acm": audit_acm_certificates,
-    "ssm": audit_ssm_managed_instances,
-    "eks": audit_eks_clusters,
-    "ecs": audit_ecs_clusters,
-}
+class ServiceRegistry:
+    """Registry that stores available service audit callables."""
+
+    def __init__(self) -> None:
+        self._checks: Dict[str, ServiceChecker] = {}
+
+    @staticmethod
+    def _normalize(name: str) -> str:
+        if not name:
+            raise ValueError("Service name must be a non-empty string")
+        return name.strip().lower()
+
+    def register(self, name: str) -> Callable[[ServiceChecker], ServiceChecker]:
+        """Return a decorator that registers *name* for the wrapped checker."""
+
+        normalized = self._normalize(name)
+
+        def decorator(func: ServiceChecker) -> ServiceChecker:
+            if normalized in self._checks and self._checks[normalized] is not func:
+                raise ValueError(f"Service '{name}' is already registered")
+            self._checks[normalized] = func
+            return func
+
+        return decorator
+
+    def __contains__(self, name: object) -> bool:
+        if not isinstance(name, str):
+            return False
+        return self._normalize(name) in self._checks
+
+    def __getitem__(self, name: str) -> ServiceChecker:
+        return self._checks[self._normalize(name)]
+
+    def keys(self) -> Iterator[str]:
+        return iter(self._checks)
+
+    def items(self) -> Iterator[tuple[str, ServiceChecker]]:
+        return iter(self._checks.items())
+
+    def as_mapping(self) -> Mapping[str, ServiceChecker]:
+        return MappingProxyType(self._checks)
+
+
+SERVICE_REGISTRY = ServiceRegistry()
+register_service = SERVICE_REGISTRY.register
+
+
+def get_service_checks() -> Mapping[str, ServiceChecker]:
+    """Return a read-only mapping of registered service checks."""
+
+    return SERVICE_REGISTRY.as_mapping()
+
+
+def _import_service_modules() -> None:
+    """Import modules that register service checks via decorators."""
+
+    from . import acm, ec2, ecs, eks, iam, kms, rds, route53, s3, ssm, vpc  # noqa: F401
+
+
+_import_service_modules()
+
+SERVICE_CHECKS: Mapping[str, ServiceChecker] = get_service_checks()
 
 __all__ = [
     "SERVICE_CHECKS",
+    "SERVICE_REGISTRY",
     "ServiceChecker",
     "ServiceReport",
+    "get_service_checks",
     "inventory_item_from_findings",
+    "register_service",
 ]

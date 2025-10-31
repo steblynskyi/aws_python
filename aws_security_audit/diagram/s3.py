@@ -8,8 +8,10 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..utils import safe_paginate
 from .models import GlobalServiceSummary, summarize_global_service_lines
+from .registry import register_global_service
 
 
+@register_global_service("s3")
 def build_s3_summary(
     session: boto3.session.Session, max_items: int
 ) -> Optional[GlobalServiceSummary]:
