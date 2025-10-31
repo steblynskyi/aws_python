@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from html import escape as html_escape
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, Union
 
 
 def escape_label(value: str) -> str:
@@ -97,7 +97,7 @@ def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
 
 
 def build_panel_text_rows(
-    value: Optional[str],
+    value: Optional[Union[str, Iterable[str]]],
     *,
     background: str,
     text_color: str,
@@ -108,26 +108,53 @@ def build_panel_text_rows(
 ) -> List[str]:
     """Return table row strings formatted for panel-style labels.
 
-    ``value`` is first normalised into a list of ``lines`` via the optional
+    ``value`` can be a single string or an iterable of pre-split strings.  The
+    content is first normalised into a list of ``lines`` via the optional
     ``wrap_lines`` callable before being escaped and wrapped in ``<TR>``
     elements.  The first line can be emphasised via ``bold`` or by supplying a
     ``label`` that will be rendered in bold followed by the associated value.
     Subsequent lines omit the label to match the styling of NAT gateway panels.
     """
 
-    if not value:
+    if value is None:
         return []
 
-    wrapper: Callable[[str], Iterable[str]]
-    if wrap_lines is None:
-        wrapper = lambda text: [text]
+    wrapper: Callable[[str], Iterable[str]] = wrap_lines or (lambda text: [text])
+
+    line_values: List[str] = []
+
+    def _append_lines(text: str) -> None:
+        if not text:
+            return
+        for raw_line in wrapper(text):
+            if raw_line:
+                line_values.append(raw_line)
+
+    if isinstance(value, str):
+        if not value:
+            return []
+        _append_lines(value)
     else:
-        wrapper = wrap_lines
+        try:
+            iterator = iter(value)
+        except TypeError:
+            return []
+        added = False
+        for item in iterator:
+            if not item:
+                continue
+            added = True
+            _append_lines(str(item))
+        if not added and not line_values:
+            return []
+
+    if not line_values:
+        return []
 
     rows: List[str] = []
     label_rendered = False
 
-    for raw_line in wrapper(value):
+    for raw_line in line_values:
         content = escape_label(raw_line)
         prefix = ""
         if label and not label_rendered:

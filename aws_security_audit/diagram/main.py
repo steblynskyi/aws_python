@@ -499,14 +499,77 @@ def _render_vpc_cluster(
         igw_node_lookup: Dict[str, str] = {}
         for igw_id in igw_in_vpc:
             node_name = f"{igw_id}_node"
-            igw_label = build_icon_label(
-                igw_id,
-                ["Internet Gateway"],
-                icon_text="IGW",
-                icon_bgcolor="#2d3748",
-                body_bgcolor="#f7fafc",
-                body_color="#2d3748",
-                border_color="#2d3748",
+            igw_details = context.internet_gateways.get(igw_id, {})
+            palette = PEERING_PANEL_COLORS
+            wrap32 = partial(wrap_label_text, width=32)
+            panel_rows: List[str] = []
+
+            panel_rows.extend(
+                build_panel_text_rows(
+                    "Internet Gateway",
+                    background=palette.header_bg,
+                    text_color=palette.header_color,
+                    bold=True,
+                )
+            )
+
+            panel_rows.extend(
+                build_panel_text_rows(
+                    igw_id,
+                    label="Gateway ID",
+                    background=palette.meta_bg,
+                    text_color=palette.meta_text,
+                    wrap_lines=wrap32,
+                )
+            )
+
+            igw_name = next(
+                (
+                    tag.get("Value")
+                    for tag in igw_details.get("Tags", [])
+                    if tag.get("Key") == "Name" and tag.get("Value")
+                ),
+                None,
+            )
+
+            panel_rows.extend(
+                build_panel_text_rows(
+                    igw_name,
+                    label="Name",
+                    background=palette.meta_bg,
+                    text_color=palette.meta_text,
+                    wrap_lines=wrap32,
+                )
+            )
+
+            attachments: List[str] = []
+            for attachment in igw_details.get("Attachments", []):
+                vpc_attachment = attachment.get("VpcId")
+                state = attachment.get("State")
+                if vpc_attachment and state:
+                    attachments.append(f"{vpc_attachment} ({state})")
+                elif vpc_attachment:
+                    attachments.append(vpc_attachment)
+                elif state:
+                    attachments.append(state)
+
+            panel_rows.extend(
+                build_panel_text_rows(
+                    attachments,
+                    label="Attachments",
+                    background=palette.info_bg,
+                    text_color=palette.info_text,
+                    wrap_lines=wrap32,
+                )
+            )
+
+            igw_label = build_icon_panel_label(
+                "IGW",
+                panel_rows,
+                border_color=palette.header_bg,
+                icon_bgcolor=palette.header_bg,
+                icon_color=palette.header_color,
+                body_bgcolor="#ffffff",
             )
             vpc_graph.node(
                 node_name,
