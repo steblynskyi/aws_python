@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from html import escape as html_escape
 from typing import Callable, Iterable, List, Optional, Union
+
+
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def escape_label(value: str) -> str:
@@ -28,6 +33,20 @@ def escape_label(value: str) -> str:
 
     escaped = html_escape(value, quote=True).replace("&#x27;", "&#39;")
     return escaped.encode("ascii", "xmlcharrefreplace").decode("ascii")
+
+
+def _normalise_panel_source(text: str) -> str:
+    """Return ``text`` normalised for downstream panel formatting."""
+
+    normalised = unicodedata.normalize("NFKC", text)
+    return normalised.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _clean_panel_line(value: str) -> str:
+    """Return a single panel line stripped of excess whitespace."""
+
+    collapsed = _WHITESPACE_RE.sub(" ", value).strip()
+    return collapsed
 
 
 def format_vertical_label(lines: Iterable[str], *, bold_first: bool = False, align: str = "CENTER") -> str:
@@ -118,9 +137,11 @@ def build_panel_text_rows(
     ``value`` can be a single string or an iterable of pre-split strings.  The
     content is first normalised into a list of ``lines`` via the optional
     ``wrap_lines`` callable before being escaped and wrapped in ``<TR>``
-    elements.  The first line can be emphasised via ``bold`` or by supplying a
-    ``label`` that will be rendered in bold followed by the associated value.
-    Subsequent lines omit the label to match the styling of NAT gateway panels.
+    elements.  Text is cleaned to remove superfluous whitespace and to
+    normalise Unicode spacing so that the rendered panel rows remain legible.
+    The first line can be emphasised via ``bold`` or by supplying a ``label``
+    that will be rendered in bold followed by the associated value. Subsequent
+    lines omit the label to match the styling of NAT gateway panels.
     """
 
     if value is None:
@@ -133,9 +154,13 @@ def build_panel_text_rows(
     def _append_lines(text: str) -> None:
         if not text:
             return
-        for raw_line in wrapper(text):
-            if raw_line:
-                line_values.append(raw_line)
+        prepared = _normalise_panel_source(text)
+        for raw_line in wrapper(prepared):
+            if not raw_line:
+                continue
+            cleaned = _clean_panel_line(raw_line)
+            if cleaned:
+                line_values.append(cleaned)
 
     if isinstance(value, str):
         if not value:
