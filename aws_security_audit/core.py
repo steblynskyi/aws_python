@@ -68,6 +68,16 @@ def collect_findings(session: boto3.session.Session, services: Iterable[str]) ->
     return collect_audit_results(session, services).findings
 
 
+def _truncate(text: str, width: int) -> str:
+    """Return ``text`` clipped to ``width`` characters with ellipsis when needed."""
+
+    if len(text) <= width:
+        return text
+    if width <= 3:
+        return text[:width]
+    return f"{text[: width - 3]}..."
+
+
 def print_findings(findings: Iterable[Finding]) -> None:
     """Pretty-print findings to stdout."""
 
@@ -76,12 +86,32 @@ def print_findings(findings: Iterable[Finding]) -> None:
         print("No findings detected.")
         return
 
-    header = f"{'Service':<10} {'Severity':<8} {'Resource':<40} Message"
+    service_width = max(len("Service"), *(len(finding.service) for finding in findings))
+    severity_width = max(len("Severity"), *(len(finding.severity) for finding in findings))
+    # Cap the resource column to avoid overly wide output while still honouring most IDs.
+    max_resource_width = 60
+    resource_width = max(
+        len("Resource"),
+        min(max(len(finding.resource_id) for finding in findings), max_resource_width),
+    )
+
+    header = (
+        f"{'Service':<{service_width}} "
+        f"{'Severity':<{severity_width}} "
+        f"{'Resource':<{resource_width}} Message"
+    )
     print(header)
     print("-" * len(header))
     for finding in findings:
-        resource = (finding.resource_id[:37] + "...") if len(finding.resource_id) > 40 else finding.resource_id
-        print(f"{finding.service:<10} {finding.severity:<8} {resource:<40} {finding.message}")
+        service = _truncate(finding.service, service_width)
+        severity = _truncate(finding.severity, severity_width)
+        resource = _truncate(finding.resource_id, resource_width)
+        print(
+            f"{service:<{service_width}} "
+            f"{severity:<{severity_width}} "
+            f"{resource:<{resource_width}} "
+            f"{finding.message}"
+        )
 
 
 def export_findings_to_excel(findings: Iterable[Finding], path: str) -> str:
