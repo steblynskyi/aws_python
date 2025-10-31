@@ -9,9 +9,10 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception, safe_paginate
-from . import ServiceReport, inventory_item_from_findings
+from . import ServiceReport, inventory_item_from_findings, register_service
 
 
+@register_service("vpc")
 def audit_vpcs(session: boto3.session.Session) -> ServiceReport:
     """Inspect VPC networking constructs for common security gaps."""
 

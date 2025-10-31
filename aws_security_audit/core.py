@@ -7,7 +7,7 @@ from typing import Iterable, List, Sequence
 import boto3
 
 from .findings import Finding, InventoryItem
-from .services import SERVICE_CHECKS, ServiceReport
+from .services import SERVICE_REGISTRY, ServiceReport
 
 
 SEVERITY_ORDER = {
@@ -46,13 +46,13 @@ def collect_audit_results(
     normalized_services: List[str] = []
     for service in services:
         key = service.lower()
-        if key not in SERVICE_CHECKS:
-            valid = ", ".join(sorted(SERVICE_CHECKS))
+        if key not in SERVICE_REGISTRY:
+            valid = ", ".join(sorted(SERVICE_REGISTRY.keys()))
             raise ValueError(f"Unknown service '{service}'. Valid services: {valid}")
         normalized_services.append(key)
 
     for service in dict.fromkeys(normalized_services):
-        checker = SERVICE_CHECKS[service]
+        checker = SERVICE_REGISTRY[service]
         report: ServiceReport = checker(session)
         for finding in report.findings:
             findings[finding.key()] = finding

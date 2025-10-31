@@ -8,9 +8,10 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception
-from . import ServiceReport, inventory_item_from_findings
+from . import ServiceReport, inventory_item_from_findings, register_service
 
 
+@register_service("kms")
 def audit_kms_keys(session: boto3.session.Session) -> ServiceReport:
     """Inspect customer-managed KMS keys for common misconfigurations."""
 

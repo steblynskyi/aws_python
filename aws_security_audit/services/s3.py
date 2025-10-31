@@ -8,9 +8,10 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import finding_from_exception
-from . import ServiceReport, inventory_item_from_findings
+from . import ServiceReport, inventory_item_from_findings, register_service
 
 
+@register_service("s3")
 def audit_s3_buckets(session: boto3.session.Session) -> ServiceReport:
     """Check buckets for public access and encryption gaps."""
 

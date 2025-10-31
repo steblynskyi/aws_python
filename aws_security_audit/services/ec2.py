@@ -8,12 +8,13 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from ..findings import Finding, InventoryItem
 from ..utils import batch_iterable, finding_from_exception, safe_paginate
-from . import ServiceReport, inventory_item_from_findings
+from . import ServiceReport, inventory_item_from_findings, register_service
 
 
 VOLUME_BATCH_SIZE = 200  # describe_volumes allows up to 500 IDs
 
 
+@register_service("ec2")
 def audit_ec2_instances(session: boto3.session.Session) -> ServiceReport:
     """Check EC2 instances for IAM profile coverage and encrypted volumes."""
 
