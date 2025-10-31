@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from textwrap import wrap
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from .html_utils import build_icon_cell, build_panel_table, escape_label
+from .html_utils import build_panel_label, build_panel_table, escape_label
 
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
 
@@ -487,17 +487,7 @@ def format_vpc_peering_connection_label(
     append_vpc_section("Requester", requester)
     append_vpc_section("Accepter", accepter)
 
-    panel = build_panel_table(rows, border_color=header_bg)
-    icon_cell = build_icon_cell(
-        "PCX", icon_bgcolor=header_bg, icon_color=header_color
-    )
-
-    return (
-        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-        f'<TR>{icon_cell}'
-        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{panel}</TD></TR>'
-        '</TABLE>>'
-    )
+    return build_panel_label(rows, border_color=header_bg)
 
 
 def format_virtual_private_gateway_label(
@@ -674,30 +664,11 @@ def format_virtual_private_gateway_label(
                     text_color=info_text,
                 )
 
-    panel = build_panel_table(rows, border_color=header_bg)
-    icon_cell = build_icon_cell("VGW", icon_bgcolor=header_bg, icon_color="#ffffff")
-
-    return (
-        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-        f'<TR>{icon_cell}'
-        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{panel}</TD></TR>'
-        '</TABLE>>'
-    )
+    return build_panel_label(rows, border_color=header_bg)
 
 
 def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
-
-    icon_map = {
-        "public": ("PUB", "#047857"),
-        "private_app": ("APP", "#1d4ed8"),
-        "private_data": ("DB", "#1e3a8a"),
-        "shared": ("SHR", "#4a5568"),
-    }
-    icon_text, icon_bgcolor = icon_map.get(cell.classification, ("SUB", "#2d3748"))
-    if cell.is_isolated:
-        icon_text = "ISO"
-        icon_bgcolor = "#4a5568"
 
     def build_subnet_panel(cell: SubnetCell) -> str:
         """Return a styled HTML table describing subnet attributes."""
@@ -821,21 +792,18 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
             '</FONT></TD></TR>'
         )
 
-    row_count = 2 + (1 if cell.instances else 0)
-    icon_cell = build_icon_cell(
-        icon_text,
-        icon_bgcolor=icon_bgcolor,
-        icon_color="#ffffff",
-        rowspan=row_count,
-    )
+    rows = [
+        f'<TR><TD ALIGN="LEFT" BGCOLOR="#ffffff">{subnet_html}</TD></TR>',
+        f'<TR><TD PORT="routes" BGCOLOR="#ffffff" ALIGN="LEFT">{route_html}</TD></TR>',
+    ]
+
+    if instance_row:
+        rows.append(instance_row)
 
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
-        f'<TR>{icon_cell}'
-        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{subnet_html}</TD></TR>'
-        f'<TR><TD PORT="routes" BGCOLOR="#ffffff" ALIGN="LEFT">{route_html}</TD></TR>'
-        f"{instance_row}"
-        '</TABLE>>'
+        + "".join(rows)
+        + '</TABLE>>'
     )
 
 
