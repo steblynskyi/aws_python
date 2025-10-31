@@ -330,26 +330,68 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
 
     subnet_html = '<BR ALIGN="LEFT"/>'.join(subnet_lines)
 
-    route_html = '<FONT POINT-SIZE="11" COLOR="#2d3748"><I>No non-local routes</I></FONT>'
-    if cell.route_summary:
-        route_lines = []
-        if cell.route_summary.name:
-            name_lines = wrap_label_text(cell.route_summary.name, width=30)
+    def build_route_table_panel(summary: Optional[RouteSummary]) -> str:
+        """Return a styled HTML table describing the subnet's route table."""
+
+        header_bg = "#fb923c"
+        header_color = "#ffffff"
+        info_bg = "#ffedd5"
+        info_text = "#7c2d12"
+        routes_bg = "#fff7ed"
+
+        rows = [
+            (
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">'
+                f'<FONT COLOR="{header_color}"><B>Route Table</B></FONT></TD></TR>'
+            )
+        ]
+
+        if not summary:
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
+                f'<FONT POINT-SIZE="10" COLOR="{info_text}"><I>No non-local routes</I></FONT>'
+                "</TD></TR>"
+            )
+            return (
+                '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
+                'CELLPADDING="4" COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
+            )
+
+        if summary.name:
+            name_lines = wrap_label_text(summary.name, width=30)
             for line in name_lines:
-                route_lines.append(f'<FONT POINT-SIZE="11"><B>{escape_label(line)}</B></FONT>')
-        route_table_lines = wrap_label_text(cell.route_summary.route_table_id, width=30)
-        for line in route_table_lines:
-            route_lines.append(f'<FONT POINT-SIZE="11">{escape_label(line)}</FONT>')
-        if cell.route_summary.routes:
-            for index, route in enumerate(cell.route_summary.routes):
-                route_lines.append(
-                    f'<FONT POINT-SIZE="10">{escape_label(route.display_text())}</FONT>'
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'
+                    f'<FONT COLOR="{info_text}"><B>{escape_label(line)}</B></FONT></TD></TR>'
                 )
-                if index != len(cell.route_summary.routes) - 1:
-                    route_lines.append('<FONT POINT-SIZE="3">&nbsp;</FONT>')
+
+        route_table_lines = wrap_label_text(summary.route_table_id, width=30)
+        for line in route_table_lines:
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'
+                f'<FONT COLOR="{info_text}">{escape_label(line)}</FONT></TD></TR>'
+            )
+
+        if summary.routes:
+            for route in summary.routes:
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
+                    f'<FONT POINT-SIZE="10" COLOR="{info_text}">&#8226; '
+                    f"{escape_label(route.display_text())}</FONT></TD></TR>"
+                )
         else:
-            route_lines.append('<FONT POINT-SIZE="11">No non-local routes</FONT>')
-        route_html = '<BR ALIGN="LEFT"/>'.join(route_lines)
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
+                f'<FONT POINT-SIZE="10" COLOR="{info_text}"><I>No non-local routes</I></FONT>'
+                "</TD></TR>"
+            )
+
+        return (
+            '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
+            'COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
+        )
+
+    route_html = build_route_table_panel(cell.route_summary)
 
     instance_row = ""
     if cell.instances:
@@ -383,7 +425,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         f'<TR>{icon_cell}'
         f'<TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
-        f'<TR><TD PORT="routes" BGCOLOR="#fff6d1"><FONT COLOR="#5c3d0c">{route_html}</FONT></TD></TR>'
+        f'<TR><TD PORT="routes" BGCOLOR="#fff7ed" ALIGN="LEFT">{route_html}</TD></TR>'
         f"{instance_row}"
         '</TABLE>>'
     )
