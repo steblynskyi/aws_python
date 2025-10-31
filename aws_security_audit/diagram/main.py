@@ -47,6 +47,7 @@ from .vpc import (
     INTERNET_GATEWAY_PANEL_COLORS,
     NAT_GATEWAY_PANEL_COLORS,
     PEERING_PANEL_COLORS,
+    RDS_PANEL_COLORS,
     VPC_PANEL_COLORS,
     group_subnets_by_vpc,
     identify_route_target,
@@ -62,6 +63,74 @@ TIER_ORDER = [
     ("private_data", "Private Data Subnets"),
     ("shared", "Shared / Directories"),
 ]
+
+def build_rds_panel_label(
+    *,
+    identifier: Optional[str] = None,
+    engine: Optional[str] = None,
+    instance_class: Optional[str] = None,
+    status: Optional[str] = None,
+) -> str:
+    """Return a panel-style label for an RDS instance."""
+
+    palette = RDS_PANEL_COLORS
+    wrap32 = partial(wrap_label_text, width=32)
+    panel_rows: List[str] = []
+
+    panel_rows.extend(
+        build_panel_text_rows(
+            "RDS Instance",
+            background=palette.header_bg,
+            text_color=palette.header_color,
+            bold=True,
+        )
+    )
+    panel_rows.extend(
+        build_panel_text_rows(
+            identifier,
+            label="Identifier",
+            background=palette.meta_bg,
+            text_color=palette.meta_text,
+            wrap_lines=wrap32,
+        )
+    )
+    panel_rows.extend(
+        build_panel_text_rows(
+            engine,
+            label="Engine",
+            background=palette.info_bg,
+            text_color=palette.info_text,
+            wrap_lines=wrap32,
+        )
+    )
+    panel_rows.extend(
+        build_panel_text_rows(
+            instance_class,
+            label="Instance Class",
+            background=palette.info_bg,
+            text_color=palette.info_text,
+            wrap_lines=wrap32,
+        )
+    )
+    panel_rows.extend(
+        build_panel_text_rows(
+            status,
+            label="Status",
+            background=palette.info_bg,
+            text_color=palette.info_text,
+            wrap_lines=wrap32,
+        )
+    )
+
+    return build_icon_panel_label(
+        "RDS",
+        panel_rows,
+        border_color="#c05621",
+        icon_bgcolor=palette.header_bg,
+        icon_color=palette.header_color,
+        body_bgcolor=palette.section_bg,
+    )
+
 
 def build_global_service_label(summary: GlobalServiceSummary) -> str:
     """Render the HTML label used for the global services cluster."""
@@ -758,23 +827,12 @@ def _render_vpc_cluster(
             engine = db_instance.get("Engine") or ""
             status = db_instance.get("DBInstanceStatus") or ""
             instance_class = db_instance.get("DBInstanceClass") or ""
-            rds_title = identifier or "RDS Instance"
-            rds_details = []
-            if engine:
-                rds_details.append(f"Engine: {engine}")
-            if instance_class:
-                rds_details.append(f"Class: {instance_class}")
-            if status:
-                rds_details.append(f"Status: {status}")
 
-            label_html = build_icon_label(
-                rds_title,
-                rds_details,
-                icon_text="RDS",
-                icon_bgcolor="#9b2c2c",
-                body_bgcolor="#fdebd0",
-                body_color="#7b341e",
-                border_color="#c05621",
+            label_html = build_rds_panel_label(
+                identifier=identifier or None,
+                engine=engine or None,
+                instance_class=instance_class or None,
+                status=status or None,
             )
 
             node_name = f"rds_{identifier or 'instance'}".replace("-", "_")
@@ -927,14 +985,11 @@ def _render_vpc_cluster(
                 ),
                 (
                     "rds",
-                    build_icon_label(
-                        "RDS Instance",
-                        ["Engine: postgres"],
-                        icon_text="RDS",
-                        icon_bgcolor="#9b2c2c",
-                        body_bgcolor="#fdebd0",
-                        body_color="#7b341e",
-                        border_color="#c05621",
+                    build_rds_panel_label(
+                        identifier="db-instance-1",
+                        engine="postgres",
+                        instance_class="db.t3.medium",
+                        status="available",
                     ),
                 ),
                 (

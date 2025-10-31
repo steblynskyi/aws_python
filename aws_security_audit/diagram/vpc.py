@@ -45,6 +45,17 @@ NAT_GATEWAY_PANEL_COLORS = PanelColors(
 )
 
 
+RDS_PANEL_COLORS = PanelColors(
+    header_bg="#9b2c2c",
+    header_color="#ffffff",
+    info_bg="#fdebd0",
+    info_text="#7b341e",
+    meta_bg="#fdebd0",
+    meta_text="#7b341e",
+    section_bg="#fdebd0",
+)
+
+
 VPC_PANEL_COLORS = PanelColors(
     header_bg="#1d4ed8",
     header_color="#ffffff",
@@ -841,6 +852,7 @@ __all__ = [
     "PanelColors",
     "PEERING_PANEL_COLORS",
     "NAT_GATEWAY_PANEL_COLORS",
+    "RDS_PANEL_COLORS",
     "INTERNET_GATEWAY_PANEL_COLORS",
     "VPC_PANEL_COLORS",
     "wrap_label_text",
