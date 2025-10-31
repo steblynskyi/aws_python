@@ -9,96 +9,6 @@ from .html_utils import build_icon_cell, escape_label
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
 
 
-SUBNET_COLUMN_STYLES: Dict[str, Dict[str, str]] = {
-    "public": {
-        "icon_text": "PUB",
-        "icon_bgcolor": "#047857",
-        "icon_color": "#ffffff",
-        "body_bgcolor": "#dcfce7",
-        "body_color": "#166534",
-        "border_color": "#047857",
-        "route_header_bg": "#047857",
-        "route_header_color": "#ffffff",
-        "route_info_bg": "#bbf7d0",
-        "route_info_color": "#166534",
-        "route_routes_bg": "#ecfdf5",
-        "route_border_color": "#047857",
-        "route_label_color": "#166534",
-        "instance_bgcolor": "#f0fdf4",
-        "instance_color": "#166534",
-    },
-    "private_app": {
-        "icon_text": "APP",
-        "icon_bgcolor": "#2563eb",
-        "icon_color": "#ffffff",
-        "body_bgcolor": "#dbeafe",
-        "body_color": "#1e3a8a",
-        "border_color": "#2563eb",
-        "route_header_bg": "#2563eb",
-        "route_header_color": "#ffffff",
-        "route_info_bg": "#bfdbfe",
-        "route_info_color": "#1e3a8a",
-        "route_routes_bg": "#eff6ff",
-        "route_border_color": "#2563eb",
-        "route_label_color": "#1e3a8a",
-        "instance_bgcolor": "#e0e7ff",
-        "instance_color": "#312e81",
-    },
-    "private_data": {
-        "icon_text": "DB",
-        "icon_bgcolor": "#4c1d95",
-        "icon_color": "#ffffff",
-        "body_bgcolor": "#ede9fe",
-        "body_color": "#4c1d95",
-        "border_color": "#4c1d95",
-        "route_header_bg": "#4c1d95",
-        "route_header_color": "#ffffff",
-        "route_info_bg": "#ddd6fe",
-        "route_info_color": "#4c1d95",
-        "route_routes_bg": "#f5f3ff",
-        "route_border_color": "#4c1d95",
-        "route_label_color": "#4c1d95",
-        "instance_bgcolor": "#ede9fe",
-        "instance_color": "#4c1d95",
-    },
-    "shared": {
-        "icon_text": "SHR",
-        "icon_bgcolor": "#4a5568",
-        "icon_color": "#ffffff",
-        "body_bgcolor": "#f1f5f9",
-        "body_color": "#1f2937",
-        "border_color": "#4a5568",
-        "route_header_bg": "#4a5568",
-        "route_header_color": "#ffffff",
-        "route_info_bg": "#e2e8f0",
-        "route_info_color": "#1f2937",
-        "route_routes_bg": "#f8fafc",
-        "route_border_color": "#4a5568",
-        "route_label_color": "#1f2937",
-        "instance_bgcolor": "#e2e8f0",
-        "instance_color": "#1f2937",
-    },
-}
-
-ISOLATED_SUBNET_STYLE: Dict[str, str] = {
-    "icon_text": "ISO",
-    "icon_bgcolor": "#4a5568",
-    "icon_color": "#ffffff",
-    "body_bgcolor": "#e2e2e2",
-    "body_color": "#2d3748",
-    "border_color": "#4a5568",
-    "route_header_bg": "#4a5568",
-    "route_header_color": "#ffffff",
-    "route_info_bg": "#e5e7eb",
-    "route_info_color": "#1f2937",
-    "route_routes_bg": "#f8fafc",
-    "route_border_color": "#4a5568",
-    "route_label_color": "#1f2937",
-    "instance_bgcolor": "#e5e7eb",
-    "instance_color": "#1f2937",
-}
-
-
 def group_subnets_by_vpc(subnets: Iterable[dict]) -> Dict[str, List[dict]]:
     """Return mapping of VPC identifiers to their subnets."""
 
@@ -302,12 +212,17 @@ def build_subnet_cell(
 ) -> SubnetCell:
     """Return :class:`SubnetCell` representation for the subnet."""
 
-    base_style = SUBNET_COLUMN_STYLES.get(classification, SUBNET_COLUMN_STYLES["private_app"])
-    fillcolor = base_style["body_bgcolor"]
-    fontcolor = base_style["body_color"]
+    color_map = {
+        "public": ("#ccebd4", "#1f3f2e"),
+        "private_app": ("#cfe3ff", "#1a365d"),
+        "private_data": ("#c0d7ff", "#102a56"),
+        "shared": ("#e2e2e2", "#2d3748"),
+    }
+
+    fillcolor, fontcolor = color_map.get(classification, ("#cfe3ff", "#1a365d"))
     if isolated:
-        fillcolor = ISOLATED_SUBNET_STYLE["body_bgcolor"]
-        fontcolor = ISOLATED_SUBNET_STYLE["body_color"]
+        fillcolor = "#e2e2e2"
+        fontcolor = "#2d3748"
 
     name = next(
         (
@@ -388,12 +303,18 @@ def wrap_label_text(value: str, width: int = 26) -> List[str]:
 def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
 
-    base_style = SUBNET_COLUMN_STYLES.get(cell.classification, SUBNET_COLUMN_STYLES["private_app"])
-    style: Dict[str, str] = dict(base_style)
+    icon_map = {
+        "public": ("PUB", "#047857"),
+        "private_app": ("APP", "#1d4ed8"),
+        "private_data": ("DB", "#1e3a8a"),
+        "shared": ("SHR", "#4a5568"),
+    }
+    icon_text, icon_bgcolor = icon_map.get(cell.classification, ("SUB", "#2d3748"))
     if cell.is_isolated:
-        style.update(ISOLATED_SUBNET_STYLE)
+        icon_text = "ISO"
+        icon_bgcolor = "#4a5568"
 
-    subnet_lines: List[str] = []
+    subnet_lines = []
     if cell.name:
         for line in wrap_label_text(cell.name):
             subnet_lines.append(f"<B>{escape_label(line)}</B>")
@@ -404,8 +325,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         subnet_lines.append(escape_label(cell.az))
     if cell.route_summary:
         subnet_lines.append(
-            f'<FONT POINT-SIZE="11" COLOR="{style["route_label_color"]}"><B>rt:</B> '
-            f"{escape_label(cell.route_summary.route_table_id)}</FONT>"
+            f'<FONT POINT-SIZE="11" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
         )
 
     subnet_html = '<BR ALIGN="LEFT"/>'.join(subnet_lines)
@@ -413,63 +333,62 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     def build_route_table_panel(summary: Optional[RouteSummary]) -> str:
         """Return a styled HTML table describing the subnet's route table."""
 
-        header_bg = style["route_header_bg"]
-        header_color = style["route_header_color"]
-        info_bg = style["route_info_bg"]
-        info_text = style["route_info_color"]
-        routes_bg = style["route_routes_bg"]
-        border_color = style["route_border_color"]
+        header_bg = "#fb923c"
+        header_color = "#ffffff"
+        info_bg = "#ffedd5"
+        info_text = "#7c2d12"
+        routes_bg = "#fff7ed"
 
         rows = [
             (
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">' 
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">'
                 f'<FONT COLOR="{header_color}"><B>Route Table</B></FONT></TD></TR>'
             )
         ]
 
         if not summary:
             rows.append(
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">' 
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
                 f'<FONT POINT-SIZE="10" COLOR="{info_text}"><I>No non-local routes</I></FONT>'
                 "</TD></TR>"
             )
             return (
-                '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
-                f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
+                '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
+                'CELLPADDING="4" COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
             )
 
         if summary.name:
             name_lines = wrap_label_text(summary.name, width=30)
             for line in name_lines:
                 rows.append(
-                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">' 
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'
                     f'<FONT COLOR="{info_text}"><B>{escape_label(line)}</B></FONT></TD></TR>'
                 )
 
         route_table_lines = wrap_label_text(summary.route_table_id, width=30)
         for line in route_table_lines:
             rows.append(
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">' 
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'
                 f'<FONT COLOR="{info_text}">{escape_label(line)}</FONT></TD></TR>'
             )
 
         if summary.routes:
             for route in summary.routes:
                 rows.append(
-                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">' 
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
                     f'<FONT POINT-SIZE="10" COLOR="{info_text}">&#8226; '
                     f"{escape_label(route.display_text())}</FONT></TD></TR>"
                 )
         else:
             rows.append(
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">' 
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{routes_bg}">'
                 f'<FONT POINT-SIZE="10" COLOR="{info_text}"><I>No non-local routes</I></FONT>'
                 "</TD></TR>"
             )
 
         return (
             '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
-            f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
+            'COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
         )
 
     route_html = build_route_table_panel(cell.route_summary)
@@ -478,30 +397,27 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     if cell.instances:
         instance_lines = ['<FONT POINT-SIZE="11"><B>Instances</B></FONT>']
         for instance in cell.instances:
-            instance_lines.append(
-                f'<FONT POINT-SIZE="11">{escape_label(instance.display_text())}</FONT>'
-            )
+            instance_lines.append(f'<FONT POINT-SIZE="11">{escape_label(instance.display_text())}</FONT>')
         instance_html = '<BR ALIGN="LEFT"/>'.join(instance_lines)
         instance_row = (
-            f'<TR><TD BGCOLOR="{style["instance_bgcolor"]}"><FONT COLOR="{style["instance_color"]}">' 
+            '<TR><TD BGCOLOR="#eef2ff"><FONT COLOR="#1a365d">'
             f"{instance_html}"
-            "</FONT></TD></TR>"
+            '</FONT></TD></TR>'
         )
 
     row_count = 2 + (1 if cell.instances else 0)
     icon_cell = build_icon_cell(
-        style["icon_text"],
-        icon_bgcolor=style["icon_bgcolor"],
-        icon_color=style["icon_color"],
+        icon_text,
+        icon_bgcolor=icon_bgcolor,
+        icon_color="#ffffff",
         rowspan=row_count,
     )
 
     return (
-        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
-        f'COLOR="{style["border_color"]}">'
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         f'<TR>{icon_cell}'
-        f'<TD BGCOLOR="{cell.color}" ALIGN="LEFT" VALIGN="TOP"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
-        f'<TR><TD PORT="routes" BGCOLOR="{style["route_routes_bg"]}" ALIGN="LEFT">{route_html}</TD></TR>'
+        f'<TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
+        f'<TR><TD PORT="routes" BGCOLOR="#fff7ed" ALIGN="LEFT">{route_html}</TD></TR>'
         f"{instance_row}"
         '</TABLE>>'
     )
