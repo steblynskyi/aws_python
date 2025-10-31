@@ -451,11 +451,6 @@ def format_virtual_private_gateway_label(
     meta_bg = "#e2e8f0"
     meta_text = "#1a202c"
     connection_bg = "#edf2f7"
-    warning_bg = "#fee2e2"
-    warning_text = "#991b1b"
-
-    healthy_connection_states = {"available", "attached", "up"}
-    healthy_tunnel_states = {"up", "available"}
 
     rows: List[str] = [
         (
@@ -503,56 +498,12 @@ def format_virtual_private_gateway_label(
             italic=True,
         )
     else:
-        total_connections = len(connection_list)
-        total_tunnels = 0
-        tunnels_down = 0
-        connections_with_issues = 0
-
-        for connection in connection_list:
-            telemetry_entries = connection.get("VgwTelemetry") or []
-            total_tunnels += len(telemetry_entries)
-
-            state_text = (
-                connection.get("State")
-                or connection.get("Status", {}).get("Message")
-                or ""
-            )
-            state_healthy = state_text.lower() in healthy_connection_states if state_text else True
-
-            down_tunnels = [
-                telemetry
-                for telemetry in telemetry_entries
-                if (telemetry.get("Status") or "").lower() not in healthy_tunnel_states
-            ]
-
-            if down_tunnels:
-                tunnels_down += len(down_tunnels)
-
-            connection_has_issue = bool(down_tunnels) or not state_healthy
-            if connection_has_issue:
-                connections_with_issues += 1
-
         append_plain(
-            f"Connections: {total_connections}",
+            f"Connections: {len(connection_list)}",
             background=info_bg,
             text_color=info_text,
             bold=True,
         )
-
-        if total_tunnels:
-            append_plain(
-                f"Tunnels: {total_tunnels - tunnels_down} up / {tunnels_down} down",
-                background=info_bg,
-                text_color=info_text,
-            )
-
-        if connections_with_issues:
-            append_plain(
-                f"Connections requiring attention: {connections_with_issues}",
-                background=warning_bg,
-                text_color=warning_text,
-                bold=True,
-            )
 
         for connection in connection_list:
             vpn_id = connection.get("VpnConnectionId", "unknown")
@@ -574,17 +525,23 @@ def format_virtual_private_gateway_label(
                 or "unknown"
             )
 
+            telemetry_ips = sorted(
+                {
+                    telemetry.get("OutsideIpAddress")
+                    for telemetry in connection.get("VgwTelemetry", []) or []
+                    if telemetry.get("OutsideIpAddress")
+                }
+            )
+
             connection_rows: List[str] = []
 
-            def append_connection_line(
-                text: str, *, bold: bool = False, text_color: str = info_text
-            ) -> None:
+            def append_connection_line(text: str, *, bold: bool = False) -> None:
                 for index, line in enumerate(wrap_label_text(text, width=32)):
                     content = escape_label(line)
                     if bold and index == 0:
                         content = f"<B>{content}</B>"
                     connection_rows.append(
-                        f'<TR><TD ALIGN="LEFT"><FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
+                        f'<TR><TD ALIGN="LEFT"><FONT COLOR="{info_text}">{content}</FONT></TD></TR>'
                     )
 
             title = vpn_name or vpn_id
@@ -593,51 +550,12 @@ def format_virtual_private_gateway_label(
             if connection_type:
                 append_connection_line(f"Type: {connection_type}")
             if state:
-                state_text = state
-                state_is_healthy = state_text.lower() in healthy_connection_states
-                append_connection_line(
-                    f"Status: {state_text}",
-                    text_color=warning_text if not state_is_healthy else info_text,
-                )
+                append_connection_line(f"Status: {state}")
             append_connection_line(f"Customer gateway: {customer_address}")
             if customer_gateway_id and customer_gateway_id != customer_address:
                 append_connection_line(f"Customer gateway ID: {customer_gateway_id}")
-            customer_asn = customer_gateway.get("BgpAsn")
-            if customer_asn:
-                append_connection_line(f"Customer ASN: {customer_asn}")
-            device_name = customer_gateway.get("DeviceName")
-            if device_name:
-                append_connection_line(f"Device: {device_name}")
-
-            telemetry_entries = sorted(
-                connection.get("VgwTelemetry", []) or [],
-                key=lambda item: item.get("OutsideIpAddress") or "",
-            )
-
-            for telemetry in telemetry_entries:
-                tunnel_ip = telemetry.get("OutsideIpAddress") or "Unknown tunnel"
-                tunnel_status = telemetry.get("Status") or "Unknown"
-                status_message = telemetry.get("StatusMessage")
-                last_change = telemetry.get("LastStatusChange")
-
-                tunnel_text = f"Tunnel {tunnel_ip}: {tunnel_status}"
-                tunnel_is_healthy = (
-                    tunnel_status.lower() in healthy_tunnel_states
-                    if tunnel_status
-                    else False
-                )
-                append_connection_line(
-                    tunnel_text,
-                    text_color=warning_text if not tunnel_is_healthy else info_text,
-                )
-
-                if status_message:
-                    append_connection_line(
-                        f"Message: {status_message}",
-                        text_color=warning_text if not tunnel_is_healthy else info_text,
-                    )
-                if last_change:
-                    append_connection_line(f"Last change: {last_change}")
+            if telemetry_ips:
+                append_connection_line(f"Outside IPs: {', '.join(telemetry_ips)}")
 
             connection_table = (
                 '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
