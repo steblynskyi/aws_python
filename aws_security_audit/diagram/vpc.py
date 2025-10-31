@@ -46,12 +46,12 @@ NAT_GATEWAY_PANEL_COLORS = PanelColors(
 
 
 VPC_PANEL_COLORS = PanelColors(
-    header_bg="#0b1f3a",
+    header_bg="#1d4ed8",
     header_color="#ffffff",
-    info_bg="#e2e8f0",
-    info_text="#0b1f3a",
-    meta_bg="#cbd5f5",
-    meta_text="#0b1f3a",
+    info_bg="#eff6ff",
+    info_text="#1e40af",
+    meta_bg="#dbeafe",
+    meta_text="#1e3a8a",
     section_bg="#bfdbfe",
 )
 
