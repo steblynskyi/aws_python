@@ -24,6 +24,17 @@ class PanelColors:
 
 
 PEERING_PANEL_COLORS = PanelColors(
+    header_bg="#6b21a8",
+    header_color="#ffffff",
+    info_bg="#f3e8ff",
+    info_text="#581c87",
+    meta_bg="#e9d5ff",
+    meta_text="#5b21b6",
+    section_bg="#ddd6fe",
+)
+
+
+ROUTE_TABLE_PANEL_COLORS = PanelColors(
     header_bg="#1e3a8a",
     header_color="#ffffff",
     info_bg="#eff6ff",
@@ -722,7 +733,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     def build_route_table_panel(summary: Optional[RouteSummary]) -> str:
         """Return a styled HTML table describing the subnet's route table."""
 
-        palette = PEERING_PANEL_COLORS
+        palette = ROUTE_TABLE_PANEL_COLORS
         header_bg = palette.header_bg
         header_color = palette.header_color
         info_bg = palette.info_bg
@@ -819,6 +830,7 @@ __all__ = [
     "summarize_route_table",
     "PanelColors",
     "PEERING_PANEL_COLORS",
+    "ROUTE_TABLE_PANEL_COLORS",
     "NAT_GATEWAY_PANEL_COLORS",
     "RDS_PANEL_COLORS",
     "INTERNET_GATEWAY_PANEL_COLORS",
