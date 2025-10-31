@@ -91,7 +91,7 @@ def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
     """Return a HTML table wrapper for detail panels."""
 
     return (
-        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
+        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10" '
         f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
     )
 
