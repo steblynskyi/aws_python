@@ -34,17 +34,6 @@ PEERING_PANEL_COLORS = PanelColors(
 )
 
 
-INTERNET_GATEWAY_PANEL_COLORS = PanelColors(
-    header_bg="#000000",
-    header_color="#ffffff",
-    info_bg="#000000",
-    info_text="#ffffff",
-    meta_bg="#000000",
-    meta_text="#ffffff",
-    section_bg="#000000",
-)
-
-
 VPC_PANEL_COLORS = PanelColors(
     header_bg="#22543d",
     header_color="#ffffff",
@@ -829,7 +818,6 @@ __all__ = [
     "summarize_route_table",
     "PanelColors",
     "PEERING_PANEL_COLORS",
-    "INTERNET_GATEWAY_PANEL_COLORS",
     "VPC_PANEL_COLORS",
     "wrap_label_text",
 ]

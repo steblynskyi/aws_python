@@ -44,7 +44,6 @@ from .vpc import (
     format_subnet_cell_label,
     format_vpc_peering_connection_label,
     format_virtual_private_gateway_label,
-    INTERNET_GATEWAY_PANEL_COLORS,
     PEERING_PANEL_COLORS,
     VPC_PANEL_COLORS,
     group_subnets_by_vpc,
@@ -501,7 +500,7 @@ def _render_vpc_cluster(
         for igw_id in igw_in_vpc:
             node_name = f"{igw_id}_node"
             igw_details = context.internet_gateways.get(igw_id, {})
-            palette = INTERNET_GATEWAY_PANEL_COLORS
+            palette = PEERING_PANEL_COLORS
             wrap32 = partial(wrap_label_text, width=32)
             panel_rows: List[str] = []
 
@@ -567,10 +566,10 @@ def _render_vpc_cluster(
             igw_label = build_icon_panel_label(
                 "IGW",
                 panel_rows,
-                border_color=palette.header_bg,
-                icon_bgcolor=palette.header_bg,
+                border_color="#000000",
+                icon_bgcolor="#000000",
                 icon_color=palette.header_color,
-                body_bgcolor=palette.section_bg,
+                body_bgcolor="#ffffff",
             )
             vpc_graph.node(
                 node_name,
