@@ -489,7 +489,7 @@ def format_vpc_peering_connection_label(
 
     panel = build_panel_table(rows, border_color=header_bg)
     icon_cell = build_icon_cell(
-        "PCX", icon_bgcolor=header_bg, icon_color=header_color
+        "", icon_bgcolor=header_bg, icon_color=header_color
     )
 
     return (
@@ -675,7 +675,7 @@ def format_virtual_private_gateway_label(
                 )
 
     panel = build_panel_table(rows, border_color=header_bg)
-    icon_cell = build_icon_cell("VGW", icon_bgcolor=header_bg, icon_color="#ffffff")
+    icon_cell = build_icon_cell("", icon_bgcolor=header_bg, icon_color="#ffffff")
 
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
@@ -689,8 +689,8 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     """Return the HTML label used for subnet cells."""
 
     icon_map = {
-        "public": ("PUB", "#047857"),
-        "private_app": ("APP", "#1d4ed8"),
+        "public": ("", "#047857"),
+        "private_app": ("", "#1d4ed8"),
         "private_data": ("DB", "#1e3a8a"),
         "shared": ("SHR", "#4a5568"),
     }
