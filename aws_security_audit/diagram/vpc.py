@@ -24,100 +24,100 @@ class PanelColors:
 
 
 PEERING_PANEL_COLORS = PanelColors(
-    header_bg="#6b21a8",
+    header_bg="#5b21b6",
     header_color="#ffffff",
-    info_bg="#f3e8ff",
-    info_text="#581c87",
-    meta_bg="#e9d5ff",
-    meta_text="#5b21b6",
+    info_bg="#f5f3ff",
+    info_text="#4c1d95",
+    meta_bg="#ede9fe",
+    meta_text="#4c1d95",
     section_bg="#ddd6fe",
 )
 
 
 ROUTE_TABLE_PANEL_COLORS = PanelColors(
-    header_bg="#1e3a8a",
+    header_bg="#1d4ed8",
     header_color="#ffffff",
     info_bg="#eff6ff",
-    info_text="#1e3a8a",
+    info_text="#1d4ed8",
     meta_bg="#dbeafe",
-    meta_text="#1e3a8a",
+    meta_text="#1e40af",
     section_bg="#bfdbfe",
 )
 
 
 NAT_GATEWAY_PANEL_COLORS = PanelColors(
-    header_bg="#f97316",
+    header_bg="#ea580c",
     header_color="#ffffff",
     info_bg="#fff7ed",
-    info_text="#9a3412",
+    info_text="#c2410c",
     meta_bg="#ffedd5",
-    meta_text="#c2410c",
+    meta_text="#9a3412",
     section_bg="#fed7aa",
 )
 
 
 RDS_PANEL_COLORS = PanelColors(
-    header_bg="#9b2c2c",
+    header_bg="#b91c1c",
     header_color="#ffffff",
-    info_bg="#fdebd0",
-    info_text="#7b341e",
-    meta_bg="#fdebd0",
-    meta_text="#7b341e",
-    section_bg="#fdebd0",
+    info_bg="#fef2f2",
+    info_text="#991b1b",
+    meta_bg="#fee2e2",
+    meta_text="#b91c1c",
+    section_bg="#fecaca",
 )
 
 
 VPC_PANEL_COLORS = PanelColors(
-    header_bg="#1d4ed8",
+    header_bg="#2563eb",
     header_color="#ffffff",
-    info_bg="#eff6ff",
-    info_text="#1e40af",
-    meta_bg="#dbeafe",
-    meta_text="#1e3a8a",
-    section_bg="#bfdbfe",
+    info_bg="#e0f2fe",
+    info_text="#1e3a8a",
+    meta_bg="#bfdbfe",
+    meta_text="#1d4ed8",
+    section_bg="#93c5fd",
 )
 
 
 INTERNET_GATEWAY_PANEL_COLORS = PanelColors(
-    header_bg="#1f2937",
+    header_bg="#111827",
     header_color="#ffffff",
     info_bg="#f8fafc",
-    info_text="#1a202c",
+    info_text="#1f2937",
     meta_bg="#e2e8f0",
-    meta_text="#1a202c",
-    section_bg="#cbd5f5",
+    meta_text="#1f2937",
+    section_bg="#c7d2fe",
 )
 
 
 VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS = PanelColors(
-    header_bg="#047857",
+    header_bg="#0f766e",
     header_color="#ffffff",
     info_bg="#ecfdf5",
-    info_text="#064e3b",
+    info_text="#0f5132",
     meta_bg="#d1fae5",
-    meta_text="#065f46",
-    section_bg="#bbf7d0",
+    meta_text="#115e45",
+    section_bg="#a7f3d0",
 )
 
 
 PUBLIC_SUBNET_PANEL_COLORS = PanelColors(
-    header_bg="#d9f99d",
-    header_color="#365314",
+    header_bg="#65a30d",
+    header_color="#ffffff",
     info_bg="#f7fee7",
-    info_text="#3f6212",
+    info_text="#4d7c0f",
     meta_bg="#ecfccb",
     meta_text="#3f6212",
-    section_bg="#bef264",
+    section_bg="#d9f99d",
 )
 
 
 PRIVATE_SUBNET_PANEL_COLORS = PanelColors(
-    header_bg="#dcfce7",
-    header_color="#14532d",
+    header_bg="#15803d",
+    header_color="#ffffff",
     info_bg="#f0fdf4",
     info_text="#166534",
-    meta_bg="#d1fae5",
-    meta_text="#166534",
+    meta_bg="#dcfce7",
+    meta_text="#14532d",
     section_bg="#bbf7d0",
 )
 
