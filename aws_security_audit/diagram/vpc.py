@@ -89,6 +89,17 @@ INTERNET_GATEWAY_PANEL_COLORS = PanelColors(
 )
 
 
+VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS = PanelColors(
+    header_bg="#047857",
+    header_color="#ffffff",
+    info_bg="#ecfdf5",
+    info_text="#064e3b",
+    meta_bg="#d1fae5",
+    meta_text="#065f46",
+    section_bg="#bbf7d0",
+)
+
+
 def group_subnets_by_vpc(subnets: Iterable[dict]) -> Dict[str, List[dict]]:
     """Return mapping of VPC identifiers to their subnets."""
 
@@ -508,14 +519,15 @@ def format_virtual_private_gateway_label(
 ) -> str:
     """Return a richly formatted label for a virtual private gateway."""
 
-    header_bg = "#1f2937"
-    header_color = "#ffffff"
-    info_bg = "#f8fafc"
-    info_text = "#1a202c"
-    meta_bg = "#e2e8f0"
-    meta_text = "#1a202c"
-    connection_bg = "#edf2f7"
-    section_bg = "#cbd5f5"
+    colors = VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS
+    header_bg = colors.header_bg
+    header_color = colors.header_color
+    info_bg = colors.info_bg
+    info_text = colors.info_text
+    meta_bg = colors.meta_bg
+    meta_text = colors.meta_text
+    connection_bg = "#dcfce7"
+    section_bg = colors.section_bg
     section_text = info_text
 
     rows: List[str] = [
