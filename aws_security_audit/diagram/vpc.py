@@ -92,11 +92,11 @@ INTERNET_GATEWAY_PANEL_COLORS = PanelColors(
 VIRTUAL_PRIVATE_GATEWAY_PANEL_COLORS = PanelColors(
     header_bg="#0f766e",
     header_color="#ffffff",
-    info_bg="#ecfdf5",
-    info_text="#134e4a",
-    meta_bg="#d1fae5",
-    meta_text="#134e4a",
-    section_bg="#99f6e4",
+    info_bg="#ffffff",
+    info_text="#000000",
+    meta_bg="#ffffff",
+    meta_text="#000000",
+    section_bg="#ffffff",
 )
 
 
@@ -557,7 +557,7 @@ def format_virtual_private_gateway_label(
     info_text = colors.info_text
     meta_bg = colors.meta_bg
     meta_text = colors.meta_text
-    connection_bg = "#dcfce7"
+    connection_bg = info_bg
     section_bg = colors.section_bg
     section_text = info_text
 
