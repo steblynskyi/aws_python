@@ -4,7 +4,7 @@ from __future__ import annotations
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Set
 
-from .html_utils import build_icon_label, escape_label
+from .html_utils import build_icon_cell, build_icon_label, build_panel_table, escape_label
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
@@ -38,9 +38,11 @@ from .vpc import (
     format_subnet_cell_label,
     format_vpc_peering_connection_label,
     format_virtual_private_gateway_label,
+    PEERING_PANEL_COLORS,
     group_subnets_by_vpc,
     identify_route_target,
     summarize_route_table,
+    wrap_label_text,
 )
 
 
@@ -389,21 +391,85 @@ def _render_vpc_cluster(
                 ),
                 None,
             )
-            nat_details = []
-            if az:
-                nat_details.append(f"AZ: {az}")
-            if eip:
-                nat_details.append(f"Elastic IP: {eip}")
-            if subnet_id:
-                nat_details.append(f"Subnet: {subnet_id}")
-            nat_label = build_icon_label(
+            palette = PEERING_PANEL_COLORS
+            panel_rows: List[str] = []
+
+            def append_plain(
+                value: Optional[str], *, background: str, text_color: str, bold: bool = False
+            ) -> None:
+                if not value:
+                    return
+
+                for line in wrap_label_text(value, width=32):
+                    content = escape_label(line)
+                    if bold:
+                        content = f"<B>{content}</B>"
+                    panel_rows.append(
+                        f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'  # Plain row
+                        f'<FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
+                    )
+
+            def append_info(
+                label: str,
+                value: Optional[str],
+                *,
+                background: str,
+                text_color: str,
+            ) -> None:
+                if not value:
+                    return
+
+                label_added = False
+                for line in wrap_label_text(value, width=32):
+                    prefix = ""
+                    if label and not label_added:
+                        prefix = f"<B>{escape_label(label)}:</B> "
+                        label_added = True
+                    panel_rows.append(
+                        f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'  # Info row
+                        f'<FONT COLOR="{text_color}">{prefix}{escape_label(line)}</FONT></TD></TR>'
+                    )
+
+            append_plain(
+                "NAT Gateway",
+                background=palette.header_bg,
+                text_color=palette.header_color,
+                bold=True,
+            )
+            append_info(
+                "Gateway ID",
                 nat_id,
-                nat_details,
-                icon_text="NAT",
-                icon_bgcolor="#b7791f",
-                body_bgcolor="#fff7e6",
-                body_color="#5c3d0c",
-                border_color="#b7791f",
+                background=palette.meta_bg,
+                text_color=palette.meta_text,
+            )
+            append_info(
+                "Availability Zone",
+                az,
+                background=palette.info_bg,
+                text_color=palette.info_text,
+            )
+            append_info(
+                "Elastic IP",
+                eip,
+                background=palette.info_bg,
+                text_color=palette.info_text,
+            )
+            append_info(
+                "Subnet",
+                subnet_id,
+                background=palette.info_bg,
+                text_color=palette.info_text,
+            )
+
+            nat_panel = build_panel_table(panel_rows, border_color=palette.header_bg)
+            icon_cell = build_icon_cell(
+                "NAT", icon_bgcolor=palette.header_bg, icon_color=palette.header_color
+            )
+            nat_label = (
+                '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+                f'<TR>{icon_cell}'
+                f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{nat_panel}</TD></TR>'
+                '</TABLE>>'
             )
             node_name = f"{nat_id}_node"
             az_key = az or center_az
@@ -447,7 +513,12 @@ def _render_vpc_cluster(
 
         for nat_node in nat_node_names:
             for igw_node in igw_node_names:
-                vpc_graph.edge(nat_node, igw_node, style="dashed", color="#b7791f")
+                vpc_graph.edge(
+                    nat_node,
+                    igw_node,
+                    style="dashed",
+                    color=PEERING_PANEL_COLORS.header_bg,
+                )
 
         for az, cell_list in cells.items():
             for cell in cell_list:
@@ -540,7 +611,7 @@ def _render_vpc_cluster(
 
                     if target_type == "nat_gateway":
                         target_node = nat_node_lookup.get(target_id)
-                        edge_color = "#b7791f"
+                        edge_color = PEERING_PANEL_COLORS.header_bg
                     elif target_type in {"internet_gateway", "egress_only_internet_gateway"}:
                         target_node = igw_node_lookup.get(target_id)
                         if not target_node:
@@ -750,10 +821,10 @@ def _render_vpc_cluster(
                         "NAT Gateway",
                         ["Elastic IP association"],
                         icon_text="NAT",
-                        icon_bgcolor="#b7791f",
-                        body_bgcolor="#fff7e6",
-                        body_color="#5c3d0c",
-                        border_color="#b7791f",
+                        icon_bgcolor=PEERING_PANEL_COLORS.header_bg,
+                        body_bgcolor=PEERING_PANEL_COLORS.info_bg,
+                        body_color=PEERING_PANEL_COLORS.info_text,
+                        border_color=PEERING_PANEL_COLORS.header_bg,
                     ),
                 ),
                 (

@@ -87,6 +87,15 @@ def build_icon_cell(
     )
 
 
+def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
+    """Return a HTML table wrapper for detail panels."""
+
+    return (
+        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
+        f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
+    )
+
+
 def build_icon_label(
     title: str,
     lines: Iterable[str],
@@ -135,6 +144,7 @@ __all__ = [
     "escape_label",
     "format_vertical_label",
     "build_icon_cell",
+    "build_panel_table",
     "build_icon_label",
 ]
 

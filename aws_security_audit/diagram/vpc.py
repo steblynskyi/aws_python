@@ -1,12 +1,37 @@
 """VPC-related helpers for network diagram generation."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from textwrap import wrap
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from .html_utils import build_icon_cell, escape_label
+from .html_utils import build_icon_cell, build_panel_table, escape_label
 
 from .models import InstanceSummary, RouteDetail, RouteSummary, SubnetCell
+
+
+@dataclass(frozen=True)
+class PanelColors:
+    """Color palette configuration for diagram detail panels."""
+
+    header_bg: str
+    header_color: str
+    info_bg: str
+    info_text: str
+    meta_bg: str
+    meta_text: str
+    section_bg: str
+
+
+PEERING_PANEL_COLORS = PanelColors(
+    header_bg="#1e3a8a",
+    header_color="#ffffff",
+    info_bg="#eff6ff",
+    info_text="#1e3a8a",
+    meta_bg="#dbeafe",
+    meta_text="#1e3a8a",
+    section_bg="#bfdbfe",
+)
 
 
 def group_subnets_by_vpc(subnets: Iterable[dict]) -> Dict[str, List[dict]]:
@@ -322,15 +347,6 @@ def _collect_vpc_cidrs(vpc_info: dict) -> List[str]:
     return cidrs
 
 
-def _build_panel_table(rows: List[str], *, border_color: str) -> str:
-    """Return a HTML table wrapper for detail panels."""
-
-    return (
-        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
-        f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
-    )
-
-
 def format_vpc_peering_connection_label(
     connection_id: str,
     connection: Optional[dict],
@@ -341,13 +357,14 @@ def format_vpc_peering_connection_label(
     requester = connection.get("RequesterVpcInfo", {}) or {}
     accepter = connection.get("AccepterVpcInfo", {}) or {}
 
-    header_bg = "#1e3a8a"
-    header_color = "#ffffff"
-    info_bg = "#eff6ff"
-    info_text = "#1e3a8a"
-    meta_bg = "#dbeafe"
-    meta_text = "#1e3a8a"
-    section_bg = "#bfdbfe"
+    palette = PEERING_PANEL_COLORS
+    header_bg = palette.header_bg
+    header_color = palette.header_color
+    info_bg = palette.info_bg
+    info_text = palette.info_text
+    meta_bg = palette.meta_bg
+    meta_text = palette.meta_text
+    section_bg = palette.section_bg
 
     rows: List[str] = [
         (
@@ -426,8 +443,10 @@ def format_vpc_peering_connection_label(
     append_vpc_section("Requester", requester)
     append_vpc_section("Accepter", accepter)
 
-    panel = _build_panel_table(rows, border_color=header_bg)
-    icon_cell = build_icon_cell("PCX", icon_bgcolor=header_bg, icon_color="#ffffff")
+    panel = build_panel_table(rows, border_color=header_bg)
+    icon_cell = build_icon_cell(
+        "PCX", icon_bgcolor=header_bg, icon_color=header_color
+    )
 
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
@@ -611,7 +630,7 @@ def format_virtual_private_gateway_label(
                     text_color=info_text,
                 )
 
-    panel = _build_panel_table(rows, border_color=header_bg)
+    panel = build_panel_table(rows, border_color=header_bg)
     icon_cell = build_icon_cell("VGW", icon_bgcolor=header_bg, icon_color="#ffffff")
 
     return (
@@ -683,21 +702,19 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         append_info("CIDR", cell.cidr)
         append_info("Availability Zone", cell.az)
 
-        return (
-            '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
-            f'COLOR="{border_color}">'
-            + "".join(rows)
-            + "</TABLE>"
-        )
+        return build_panel_table(rows, border_color=border_color)
 
     def build_route_table_panel(summary: Optional[RouteSummary]) -> str:
         """Return a styled HTML table describing the subnet's route table."""
 
-        header_bg = "#fb923c"
-        header_color = "#ffffff"
-        info_bg = "#ffedd5"
-        info_text = "#7c2d12"
-        routes_bg = "#fff7ed"
+        palette = PEERING_PANEL_COLORS
+        header_bg = palette.header_bg
+        header_color = palette.header_color
+        info_bg = palette.info_bg
+        info_text = palette.info_text
+        meta_bg = palette.meta_bg
+        meta_text = palette.meta_text
+        routes_bg = palette.section_bg
 
         rows = [
             (
@@ -712,10 +729,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
                 f'<FONT POINT-SIZE="10" COLOR="{info_text}"><I>No non-local routes</I></FONT>'
                 "</TD></TR>"
             )
-            return (
-                '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
-                'CELLPADDING="4" COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
-            )
+            return build_panel_table(rows, border_color=header_bg)
 
         if summary.name:
             name_lines = wrap_label_text(summary.name, width=30)
@@ -728,8 +742,8 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         route_table_lines = wrap_label_text(summary.route_table_id, width=30)
         for line in route_table_lines:
             rows.append(
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'
-                f'<FONT COLOR="{info_text}">{escape_label(line)}</FONT></TD></TR>'
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{meta_bg}">' 
+                f'<FONT COLOR="{meta_text}">{escape_label(line)}</FONT></TD></TR>'
             )
 
         if summary.routes:
@@ -746,10 +760,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
                 "</TD></TR>"
             )
 
-        return (
-            '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
-            'COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
-        )
+        return build_panel_table(rows, border_color=header_bg)
 
     subnet_html = build_subnet_panel(cell)
     route_html = build_route_table_panel(cell.route_summary)
@@ -794,4 +805,7 @@ __all__ = [
     "group_subnets_by_vpc",
     "identify_route_target",
     "summarize_route_table",
+    "PanelColors",
+    "PEERING_PANEL_COLORS",
+    "wrap_label_text",
 ]
