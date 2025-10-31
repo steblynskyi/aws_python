@@ -361,12 +361,6 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         append_info("CIDR", cell.cidr)
         append_info("Availability Zone", cell.az)
 
-        isolation_value = "Isolated" if cell.is_isolated else "Connected"
-        append_info("Isolation", isolation_value)
-
-        if cell.route_summary:
-            append_info("Route Table", cell.route_summary.route_table_id)
-
         return (
             '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
             f'COLOR="{border_color}">'
