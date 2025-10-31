@@ -96,6 +96,13 @@ def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
     )
 
 
+def build_panel_label(rows: Iterable[str], *, border_color: str) -> str:
+    """Return a bordered panel label without an icon column."""
+
+    panel = build_panel_table(rows, border_color=border_color)
+    return f"<{panel}>"
+
+
 def build_panel_text_rows(
     value: Optional[Union[str, Iterable[str]]],
     *,
@@ -253,6 +260,7 @@ __all__ = [
     "format_vertical_label",
     "build_icon_cell",
     "build_panel_table",
+    "build_panel_label",
     "build_panel_text_rows",
     "build_icon_panel_label",
     "build_icon_label",

@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Set
 
 from .html_utils import (
     build_icon_label,
-    build_icon_panel_label,
+    build_panel_label,
     build_panel_text_rows,
     escape_label,
 )
@@ -122,14 +122,7 @@ def build_rds_panel_label(
         )
     )
 
-    return build_icon_panel_label(
-        "RDS",
-        panel_rows,
-        border_color="#c05621",
-        icon_bgcolor=palette.header_bg,
-        icon_color=palette.header_color,
-        body_bgcolor=palette.section_bg,
-    )
+    return build_panel_label(panel_rows, border_color="#c05621")
 
 
 def build_global_service_label(summary: GlobalServiceSummary) -> str:
@@ -372,14 +365,7 @@ def _build_vpc_label(vpc: dict) -> str:
         )
     )
 
-    return build_icon_panel_label(
-        "VPC",
-        panel_rows,
-        border_color=palette.header_bg,
-        icon_bgcolor=palette.header_bg,
-        icon_color=palette.header_color,
-        body_bgcolor="#ffffff",
-    )
+    return build_panel_label(panel_rows, border_color=palette.header_bg)
 
 
 def _render_vpc_cluster(
@@ -445,13 +431,9 @@ def _render_vpc_cluster(
             )
         )
 
-        internet_label = build_icon_panel_label(
-            "WWW",
+        internet_label = build_panel_label(
             internet_rows,
             border_color=palette.header_bg,
-            icon_bgcolor=palette.header_bg,
-            icon_color=palette.header_color,
-            body_bgcolor="#ffffff",
         )
         vpc_graph.node(
             f"{vpc_id}_internet",
@@ -563,13 +545,9 @@ def _render_vpc_cluster(
                 )
             )
 
-            nat_label = build_icon_panel_label(
-                "NAT",
+            nat_label = build_panel_label(
                 panel_rows,
                 border_color=palette.header_bg,
-                icon_bgcolor=palette.header_bg,
-                icon_color=palette.header_color,
-                body_bgcolor="#ffffff",
             )
             node_name = f"{nat_id}_node"
             az_key = az or center_az
@@ -654,13 +632,9 @@ def _render_vpc_cluster(
                 )
             )
 
-            igw_label = build_icon_panel_label(
-                "IGW",
+            igw_label = build_panel_label(
                 panel_rows,
                 border_color=palette.header_bg,
-                icon_bgcolor=palette.header_bg,
-                icon_color=palette.header_color,
-                body_bgcolor="#ffffff",
             )
             vpc_graph.node(
                 node_name,
