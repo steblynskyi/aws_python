@@ -128,7 +128,7 @@ def build_rds_panel_label(
 def build_global_service_label(summary: GlobalServiceSummary) -> str:
     """Render the HTML label used for the global services cluster."""
 
-    label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+    label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" POINT-SIZE="12">'
     label += '<TR><TD BGCOLOR="{}"><FONT COLOR="{}"><B>{}</B></FONT></TD></TR>'.format(
         summary.fillcolor, summary.fontcolor, escape_label(summary.title)
     )

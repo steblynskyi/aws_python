@@ -67,7 +67,8 @@ def format_vertical_label(lines: Iterable[str], *, bold_first: bool = False, ali
         rows.append(f'<TR><TD ALIGN="{align}">{content}</TD></TR>')
     body = "".join(rows) or '<TR><TD ALIGN="CENTER"></TD></TR>'
     return (
-        '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">'
+        '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" '
+        'POINT-SIZE="12">'
         f"{body}</TABLE>>"
     )
 
@@ -114,7 +115,7 @@ def build_panel_table(rows: Iterable[str], *, border_color: str) -> str:
 
     return (
         '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10" '
-        f'COLOR="{border_color}">' + "".join(rows) + "</TABLE>"
+        f'COLOR="{border_color}" POINT-SIZE="12">' + "".join(rows) + "</TABLE>"
     )
 
 
@@ -229,7 +230,7 @@ def build_icon_panel_label(
 
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
-        f'COLOR="{border_color}"><TR>'
+        f'COLOR="{border_color}" POINT-SIZE="12"><TR>'
         f'<TD ALIGN="{align}" VALIGN="TOP" BGCOLOR="{body_bgcolor}">{panel}</TD>'
         "</TR></TABLE>>"
     )
@@ -267,12 +268,14 @@ def build_icon_label(
             f'<TR><TD ALIGN="{align}"><FONT COLOR="{body_color}">{line}</FONT></TD></TR>'
         )
     body_table = (
-        '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">' + "".join(body_rows) + "</TABLE>"
+        '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" POINT-SIZE="12">'
+        + "".join(body_rows)
+        + "</TABLE>"
     )
 
     label = (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
-        f'COLOR="{border_color}"><TR>'
+        f'COLOR="{border_color}" POINT-SIZE="12"><TR>'
         f'<TD BGCOLOR="{body_bgcolor}" ALIGN="{align}" VALIGN="TOP">{body_table}</TD>'
         "</TR></TABLE>>"
     )

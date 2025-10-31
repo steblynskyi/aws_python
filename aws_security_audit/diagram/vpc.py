@@ -874,7 +874,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         rows.append(instance_row)
 
     return (
-        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" POINT-SIZE="12">'
         + "".join(rows)
         + '</TABLE>>'
     )
