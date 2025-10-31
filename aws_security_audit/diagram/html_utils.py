@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from html import escape as html_escape
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 
 def escape_label(value: str) -> str:
@@ -50,6 +50,43 @@ def format_vertical_label(lines: Iterable[str], *, bold_first: bool = False, ali
     return f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">{body}</TABLE>>'
 
 
+def build_icon_cell(
+    icon_text: str,
+    *,
+    icon_bgcolor: str = "#1f2937",
+    icon_color: str = "#ffffff",
+    align: str = "CENTER",
+    valign: str = "TOP",
+    rowspan: Optional[int] = None,
+) -> str:
+    """Return a formatted ``<TD>`` element for icon-style columns.
+
+    The route table panels define the visual baseline for icon columns within
+    the network diagram.  Reusing this helper ensures that every icon-based
+    label shares consistent alignment, colouring, and minimum sizing.
+    """
+
+    icon_cell_attributes = []
+    if rowspan and rowspan > 1:
+        icon_cell_attributes.append(f'ROWSPAN="{rowspan}"')
+    # Maintain a consistent minimum size while still allowing Graphviz to
+    # expand the icon column when the label content requires additional space.
+    icon_cell_attributes.extend(
+        [
+            f'BGCOLOR="{icon_bgcolor}"',
+            f'ALIGN="{align}"',
+            f'VALIGN="{valign}"',
+            'WIDTH="32"',
+            'HEIGHT="32"',
+        ]
+    )
+    attribute_str = " ".join(icon_cell_attributes)
+    return (
+        f'<TD {attribute_str}><FONT COLOR="{icon_color}"><B>'
+        f"{escape_label(icon_text)}</B></FONT></TD>"
+    )
+
+
 def build_icon_label(
     title: str,
     lines: Iterable[str],
@@ -78,31 +115,26 @@ def build_icon_label(
         '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">' + "".join(body_rows) + "</TABLE>"
     )
 
-    icon_cell_attributes = [
-        f'BGCOLOR="{icon_bgcolor}"',
-        'ALIGN="CENTER"',
-        'VALIGN="MIDDLE"',
-        'WIDTH="32"',
-        'HEIGHT="32"',
-    ]
-    # Allow Graphviz to expand the icon cell when the text would otherwise
-    # overflow the fixed 32px square.  This avoids ``cell size too small``
-    # warnings while keeping the minimum size consistent for short labels.
-    icon_cell_attribute_str = " ".join(icon_cell_attributes)
-    icon_cell = (
-        f'<TD {icon_cell_attribute_str}><FONT COLOR="{icon_color}"><B>'
-        f"{escape_label(icon_text)}</B></FONT></TD>"
+    icon_cell = build_icon_cell(
+        icon_text,
+        icon_bgcolor=icon_bgcolor,
+        icon_color=icon_color,
     )
 
     label = (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
         f'COLOR="{border_color}"><TR>'
         f"{icon_cell}"
-        f'<TD BGCOLOR="{body_bgcolor}" ALIGN="{align}">{body_table}</TD>'
+        f'<TD BGCOLOR="{body_bgcolor}" ALIGN="{align}" VALIGN="TOP">{body_table}</TD>'
         "</TR></TABLE>>"
     )
     return label
 
 
-__all__ = ["escape_label", "format_vertical_label", "build_icon_label"]
+__all__ = [
+    "escape_label",
+    "format_vertical_label",
+    "build_icon_cell",
+    "build_icon_label",
+]
 
