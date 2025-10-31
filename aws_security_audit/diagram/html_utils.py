@@ -188,24 +188,20 @@ def build_icon_panel_label(
     align: str = "LEFT",
     icon_align: str = "CENTER",
 ) -> str:
-    """Return a panel label featuring an icon column and bordered body.
+    """Return a bordered panel label for panel style content.
 
-    ``icon_align`` allows callers to centre the icon while keeping the body
-    text left-aligned, matching the styling used by the Internet Gateway
-    panels in the network diagram.
+    The function signature is retained for backwards compatibility even
+    though icon-specific arguments are now ignored.  This allows callers to
+    continue passing styling values while rendering a single column layout.
     """
 
+    _ = icon_text, icon_bgcolor, icon_color, icon_align
+
     panel = build_panel_table(panel_rows, border_color=border_color)
-    icon_cell = build_icon_cell(
-        icon_text,
-        icon_bgcolor=icon_bgcolor,
-        icon_color=icon_color,
-        align=icon_align,
-    )
 
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
-        f'COLOR="{border_color}"><TR>{icon_cell}'
+        f'COLOR="{border_color}"><TR>'
         f'<TD ALIGN="{align}" VALIGN="TOP" BGCOLOR="{body_bgcolor}">{panel}</TD>'
         "</TR></TABLE>>"
     )
@@ -223,7 +219,14 @@ def build_icon_label(
     border_color: str = "#1a202c",
     align: str = "LEFT",
 ) -> str:
-    """Return an HTML label featuring an icon-style column beside text content."""
+    """Return an HTML label containing the supplied ``lines``.
+
+    The ``icon_*`` arguments are ignored but preserved in the signature so that
+    callers do not need to change.  Labels now render without an icon column,
+    showing only the textual content.
+    """
+
+    _ = icon_text, icon_bgcolor, icon_color
 
     safe_title = escape_label(title)
     safe_lines: List[str] = [escape_label(line) for line in lines]
@@ -239,16 +242,9 @@ def build_icon_label(
         '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">' + "".join(body_rows) + "</TABLE>"
     )
 
-    icon_cell = build_icon_cell(
-        icon_text,
-        icon_bgcolor=icon_bgcolor,
-        icon_color=icon_color,
-    )
-
     label = (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" '
         f'COLOR="{border_color}"><TR>'
-        f"{icon_cell}"
         f'<TD BGCOLOR="{body_bgcolor}" ALIGN="{align}" VALIGN="TOP">{body_table}</TD>'
         "</TR></TABLE>>"
     )
