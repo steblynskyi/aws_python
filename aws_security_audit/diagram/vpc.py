@@ -451,6 +451,8 @@ def format_virtual_private_gateway_label(
     meta_bg = "#e2e8f0"
     meta_text = "#1a202c"
     connection_bg = "#edf2f7"
+    section_bg = "#cbd5f5"
+    section_text = info_text
 
     rows: List[str] = [
         (
@@ -467,7 +469,7 @@ def format_virtual_private_gateway_label(
         italic: bool = False,
         bold: bool = False,
     ) -> None:
-        if not value:
+        if value is None:
             return
 
         for line in wrap_label_text(value, width=32):
@@ -481,14 +483,44 @@ def format_virtual_private_gateway_label(
                 f'<FONT COLOR="{text_color}">{content}</FONT></TD></TR>'
             )
 
+    def append_info(
+        label: str,
+        value: Optional[str],
+        *,
+        background: str = info_bg,
+        text_color: str = info_text,
+    ) -> None:
+        if value is None:
+            return
+
+        label_added = False
+        for line in wrap_label_text(value, width=32):
+            prefix = ""
+            if label and not label_added:
+                prefix = f"<B>{escape_label(label)}:</B> "
+                label_added = True
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{background}">'
+                f'<FONT COLOR="{text_color}">{prefix}{escape_label(line)}</FONT></TD></TR>'
+            )
+
+    append_info("Gateway ID", gateway_id, background=meta_bg, text_color=meta_text)
+
+    connection_list = sorted(connections or [], key=lambda item: item.get("VpnConnectionId", ""))
+
     append_plain(
-        f"Gateway ID: {gateway_id}",
-        background=meta_bg,
-        text_color=meta_text,
+        f"Connections: {len(connection_list)}",
+        background=info_bg,
+        text_color=info_text,
         bold=True,
     )
 
-    connection_list = sorted(connections or [], key=lambda item: item.get("VpnConnectionId", ""))
+    append_plain(
+        "Site-to-Site VPN connections",
+        background=section_bg,
+        text_color=section_text,
+        bold=True,
+    )
 
     if not connection_list:
         append_plain(
@@ -498,14 +530,7 @@ def format_virtual_private_gateway_label(
             italic=True,
         )
     else:
-        append_plain(
-            f"Connections: {len(connection_list)}",
-            background=info_bg,
-            text_color=info_text,
-            bold=True,
-        )
-
-        for connection in connection_list:
+        for index, connection in enumerate(connection_list):
             vpn_id = connection.get("VpnConnectionId", "unknown")
             vpn_name = next(
                 (
@@ -533,39 +558,58 @@ def format_virtual_private_gateway_label(
                 }
             )
 
-            connection_rows: List[str] = []
-
-            def append_connection_line(text: str, *, bold: bool = False) -> None:
-                for index, line in enumerate(wrap_label_text(text, width=32)):
-                    content = escape_label(line)
-                    if bold and index == 0:
-                        content = f"<B>{content}</B>"
-                    connection_rows.append(
-                        f'<TR><TD ALIGN="LEFT"><FONT COLOR="{info_text}">{content}</FONT></TD></TR>'
-                    )
-
             title = vpn_name or vpn_id
-            append_connection_line(title, bold=True)
-            append_connection_line(f"VPN ID: {vpn_id}")
-            if connection_type:
-                append_connection_line(f"Type: {connection_type}")
-            if state:
-                append_connection_line(f"Status: {state}")
-            append_connection_line(f"Customer gateway: {customer_address}")
+            append_plain(
+                title,
+                background=connection_bg,
+                text_color=info_text,
+                bold=True,
+            )
+            append_info(
+                "VPN ID",
+                vpn_id,
+                background=meta_bg,
+                text_color=meta_text,
+            )
+            append_info(
+                "Type",
+                connection_type,
+                background=connection_bg,
+                text_color=info_text,
+            )
+            append_info(
+                "Status",
+                state,
+                background=connection_bg,
+                text_color=info_text,
+            )
+            append_info(
+                "Customer gateway",
+                customer_address,
+                background=connection_bg,
+                text_color=info_text,
+            )
             if customer_gateway_id and customer_gateway_id != customer_address:
-                append_connection_line(f"Customer gateway ID: {customer_gateway_id}")
+                append_info(
+                    "Customer gateway ID",
+                    customer_gateway_id,
+                    background=connection_bg,
+                    text_color=info_text,
+                )
             if telemetry_ips:
-                append_connection_line(f"Outside IPs: {', '.join(telemetry_ips)}")
+                append_info(
+                    "Outside IPs",
+                    ", ".join(telemetry_ips),
+                    background=connection_bg,
+                    text_color=info_text,
+                )
 
-            connection_table = (
-                '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
-                + "".join(connection_rows)
-                + "</TABLE>"
-            )
-
-            rows.append(
-                f'<TR><TD ALIGN="LEFT" BGCOLOR="{connection_bg}">{connection_table}</TD></TR>'
-            )
+            if index != len(connection_list) - 1:
+                append_plain(
+                    "",
+                    background="#ffffff",
+                    text_color=info_text,
+                )
 
     panel = _build_panel_table(rows, border_color=header_bg)
     icon_cell = build_icon_cell("VGW", icon_bgcolor=header_bg, icon_color="#ffffff")
