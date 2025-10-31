@@ -353,7 +353,7 @@ def _render_vpc_cluster(
         vpc_graph.attr(color="#4a5568")
         vpc_graph.attr(fontsize="13")
         vpc_graph.attr(fontname="Helvetica")
-        vpc_graph.attr(bgcolor="#f8fafc")
+        vpc_graph.attr(bgcolor="#bfdbfe")
 
         internet_label = build_icon_label(
             "Internet",
