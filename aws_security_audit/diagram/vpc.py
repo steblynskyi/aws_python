@@ -314,21 +314,89 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
         icon_text = "ISO"
         icon_bgcolor = "#4a5568"
 
-    subnet_lines = []
-    if cell.name:
-        for line in wrap_label_text(cell.name):
-            subnet_lines.append(f"<B>{escape_label(line)}</B>")
-    subnet_lines.append(f'<FONT POINT-SIZE="11">{escape_label(cell.subnet_id)}</FONT>')
-    if cell.cidr:
-        subnet_lines.append(escape_label(cell.cidr))
-    if cell.az:
-        subnet_lines.append(escape_label(cell.az))
-    if cell.route_summary:
-        subnet_lines.append(
-            f'<FONT POINT-SIZE="11" COLOR="#2d3748"><B>rt:</B> {escape_label(cell.route_summary.route_table_id)}</FONT>'
-        )
+    def build_subnet_panel(cell: SubnetCell) -> str:
+        """Return a styled HTML table describing subnet attributes."""
 
-    subnet_html = '<BR ALIGN="LEFT"/>'.join(subnet_lines)
+        header_bg = cell.color
+        header_color = cell.font_color
+        border_color = cell.color
+        info_bg = "#f8fafc"
+        info_text = "#1a202c"
+        meta_bg = "#edf2f7"
+        meta_text = "#1a202c"
+
+        rows = [
+            (
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{header_bg}">'  # Header row
+                f'<FONT COLOR="{header_color}"><B>Subnet</B></FONT></TD></TR>'
+            )
+        ]
+
+        if cell.name:
+            for line in wrap_label_text(cell.name, width=32):
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'  # Subnet name rows
+                    f'<FONT COLOR="{info_text}"><B>{escape_label(line)}</B></FONT></TD></TR>'
+                )
+
+        subnet_id_lines = wrap_label_text(cell.subnet_id, width=32)
+        for line in subnet_id_lines:
+            rows.append(
+                f'<TR><TD ALIGN="LEFT" BGCOLOR="{meta_bg}">'  # Subnet ID rows
+                f'<FONT POINT-SIZE="11" COLOR="{meta_text}">{escape_label(line)}</FONT></TD></TR>'
+            )
+
+        def append_info(label: str, value: Optional[str]) -> None:
+            if not value:
+                return
+
+            value_lines = wrap_label_text(value, width=32)
+            for index, line in enumerate(value_lines):
+                prefix = f'<B>{escape_label(label)}:</B> ' if index == 0 else ""
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" BGCOLOR="{info_bg}">'  # Attribute rows
+                    f'<FONT COLOR="{info_text}">{prefix}{escape_label(line)}</FONT></TD></TR>'
+                )
+
+        append_info("CIDR", cell.cidr)
+        append_info("Availability Zone", cell.az)
+
+        classification_map = {
+            "public": "Public",
+            "private_app": "Private App",
+            "private_data": "Private Data",
+            "shared": "Shared / Directory",
+            "ingress": "Ingress",
+        }
+        classification_value = classification_map.get(cell.classification)
+        if not classification_value and cell.classification:
+            classification_value = cell.classification.replace("_", " ").title()
+        append_info("Classification", classification_value)
+
+        tier_map = {
+            "public": "Public",
+            "private_app": "Private App",
+            "private_data": "Private Data",
+            "shared": "Shared / Directory",
+            "ingress": "Ingress",
+        }
+        tier_value = tier_map.get(cell.tier)
+        if not tier_value and cell.tier:
+            tier_value = cell.tier.replace("_", " ").title()
+        append_info("Tier", tier_value)
+
+        isolation_value = "Isolated" if cell.is_isolated else "Connected"
+        append_info("Isolation", isolation_value)
+
+        if cell.route_summary:
+            append_info("Route Table", cell.route_summary.route_table_id)
+
+        return (
+            '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" '
+            f'COLOR="{border_color}">'
+            + "".join(rows)
+            + "</TABLE>"
+        )
 
     def build_route_table_panel(summary: Optional[RouteSummary]) -> str:
         """Return a styled HTML table describing the subnet's route table."""
@@ -391,6 +459,7 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
             'COLOR="#fb923c">' + "".join(rows) + "</TABLE>"
         )
 
+    subnet_html = build_subnet_panel(cell)
     route_html = build_route_table_panel(cell.route_summary)
 
     instance_row = ""
@@ -416,8 +485,8 @@ def format_subnet_cell_label(cell: SubnetCell) -> str:
     return (
         '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         f'<TR>{icon_cell}'
-        f'<TD BGCOLOR="{cell.color}" COLOR="{cell.font_color}"><FONT COLOR="{cell.font_color}">{subnet_html}</FONT></TD></TR>'
-        f'<TR><TD PORT="routes" BGCOLOR="#fff7ed" ALIGN="LEFT">{route_html}</TD></TR>'
+        f'<TD ALIGN="LEFT" BGCOLOR="#ffffff">{subnet_html}</TD></TR>'
+        f'<TR><TD PORT="routes" BGCOLOR="#ffffff" ALIGN="LEFT">{route_html}</TD></TR>'
         f"{instance_row}"
         '</TABLE>>'
     )
