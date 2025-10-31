@@ -424,14 +424,34 @@ def _render_vpc_cluster(
         vpc_graph.attr(fontname="Helvetica")
         vpc_graph.attr(bgcolor="#f8fafc")
 
-        internet_label = build_icon_label(
-            "Internet",
-            [f"VPC {vpc_id}"],
-            icon_text="WWW",
-            icon_bgcolor="#1a202c",
-            body_bgcolor="#edf2f7",
-            body_color="#1a202c",
-            border_color="#1a202c",
+        palette = INTERNET_GATEWAY_PANEL_COLORS
+        wrap32 = partial(wrap_label_text, width=32)
+        internet_rows: List[str] = []
+        internet_rows.extend(
+            build_panel_text_rows(
+                "Internet",
+                background=palette.header_bg,
+                text_color=palette.header_color,
+                bold=True,
+            )
+        )
+        internet_rows.extend(
+            build_panel_text_rows(
+                vpc_id,
+                label="VPC",
+                background=palette.meta_bg,
+                text_color=palette.meta_text,
+                wrap_lines=wrap32,
+            )
+        )
+
+        internet_label = build_icon_panel_label(
+            "WWW",
+            internet_rows,
+            border_color=palette.header_bg,
+            icon_bgcolor=palette.header_bg,
+            icon_color=palette.header_color,
+            body_bgcolor="#ffffff",
         )
         vpc_graph.node(
             f"{vpc_id}_internet",
