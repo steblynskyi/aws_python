@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
+import pkgutil
 from types import MappingProxyType
 from typing import Callable, Dict, Iterable, Iterator, List, Mapping
 
@@ -114,7 +116,16 @@ def get_service_checks() -> Mapping[str, ServiceChecker]:
 def _import_service_modules() -> None:
     """Import modules that register service checks via decorators."""
 
-    from . import acm, ec2, ecs, eks, iam, kms, rds, route53, s3, ssm, vpc  # noqa: F401
+    package_name = __name__
+    package_paths = getattr(__spec__, "submodule_search_locations", None)
+    if not package_paths:
+        return
+
+    for module_info in pkgutil.iter_modules(package_paths):
+        module_name = module_info.name
+        if module_name.startswith("_"):
+            continue
+        importlib.import_module(f"{package_name}.{module_name}")
 
 
 _import_service_modules()
