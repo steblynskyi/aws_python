@@ -938,20 +938,14 @@ def _render_global_services_cluster(
             previous_node = node_id
 
     if alignment_nodes and first_node_id:
-        # ``rank`` statements cannot be injected directly into the root graph body
-        # when the referenced nodes already belong to other ranksets (for example,
-        # nodes inside tier clusters). Doing so causes Graphviz to emit warnings
-        # similar to ``node ... was already in a rankset`` which are treated as
-        # errors by our renderer. Instead, create a dedicated non-cluster
-        # subgraph to hold the alignment directive so that Graphviz can merge the
-        # rank requirements without complaint.
-        rank_nodes = list(dict.fromkeys(list(alignment_nodes) + [first_node_id]))
-
-        with graph.subgraph() as alignment_graph:
-            alignment_graph.attr(rank="same")
-            for node_id in rank_nodes:
-                alignment_graph.node(node_id)
-
+        # Graphviz treats multiple ``rank`` assignments for the same node as a
+        # conflict and returns a non-zero status when it has to discard one of
+        # them.  The VPC "internet" nodes are already part of the ``rank``
+        # statements that keep the tier columns aligned, and the global services
+        # cluster uses ``rank=min`` to pin it to the top of the diagram.  To keep
+        # those layouts intact (and avoid the "was already in a rankset" warning),
+        # skip creating an additional ``rank=same`` subgraph and instead rely on
+        # an invisible edge to gently nudge the clusters together.
         graph.edge(
             alignment_nodes[-1],
             first_node_id,
